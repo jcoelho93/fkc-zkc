@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mindful Scroll</string>
+    <string name="accessibility_service_label">Mindful Scroll scroll monitor</string>
+    <string name="accessibility_service_description">Counts scroll gestures inside the apps you choose to monitor, so Mindful Scroll can show a break reminder when you cross your own threshold. It never reads what is on screen and never sends anything off your device.</string>
+</resources>

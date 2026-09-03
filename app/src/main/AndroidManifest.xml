@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Usage-access is a "special app access" permission: declaring it here makes
+      Mindful Scroll eligible to appear in Settings > Apps > Special access > Usage
+      access, where the user must explicitly flip it on. It is never auto-granted.
+      It is used ONLY to read how long monitored apps have been in the foreground -
+      never which apps are installed system-wide, never anything else.
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Re-enqueues the WorkManager periodic reset job after a reboot; nothing more. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      Deliberately NOT declared, ever:
+        - android.permission.INTERNET
+        - any network / analytics / crash-reporting permission
+      This app has no backend. See README.md "Privacy" section.
+    -->
+
+    <queries>
+        <!-- Needed to enumerate installed apps for the monitored-apps picker (Android 11+). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".MindfulScrollApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MindfulScroll">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.MindfulScroll">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          The overlay is drawn from the accessibility service's own window token via
+          TYPE_ACCESSIBILITY_OVERLAY, so no SYSTEM_ALERT_WINDOW permission is requested.
+          See accessibility/ScrollMonitorService.kt for detection details.
+        -->
+        <service
+            android:name=".accessibility.ScrollMonitorService"
+            android:exported="false"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice.accessibility_service_config"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <receiver
+            android:name=".stats.BootRescheduleReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Hilt drives WorkManager's Configuration.Provider ourselves; disable the default initializer. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup.StartupInitializer"
+                tools:node="remove" />
+        </provider>
+
+    </application>
+
+</manifest>
