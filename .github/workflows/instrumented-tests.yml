@@ -61,3 +61,14 @@ jobs:
           name: instrumented-test-reports
           path: app/build/reports/androidTests
           retention-days: 7
+
+      # Full, unfiltered logcat - the printed-to-stdout grep is a curated guess at what's
+      # relevant; this is the fallback for when that guess isn't broad enough.
+      - name: Upload full logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-logcat
+          path: /tmp/full-logcat.txt
+          retention-days: 7
+          if-no-files-found: ignore

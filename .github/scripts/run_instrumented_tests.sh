@@ -16,7 +16,10 @@ RESULT=$?
 sleep 2
 kill "$LOGCAT_PID" 2>/dev/null || true
 
-echo "=== Filtered logcat (accessibility / Hilt / MindfulScroll / crashes) ==="
-grep -iE "accessibility|hilt|mindfulscroll|androidruntime|fatal exception|scrollmonitor" /tmp/full-logcat.txt || echo "(no matching lines)"
+echo "=== Filtered logcat (broad: accessibility / bind / package manager / mindfulscroll / crashes) ==="
+grep -iE "accessib|bindservice|iaccessibility|servicecon|packagemanager|activitytaskmanager|activitymanager|resolveinfo|resolveservice|mindfulscroll|scrollmonitor|androidruntime|fatal exception|denied|securityexception|not allowed|refused" /tmp/full-logcat.txt || echo "(no matching lines)"
+
+echo ""
+echo "=== Full logcat line count: $(wc -l < /tmp/full-logcat.txt) (uploaded in full as the 'full-logcat' artifact) ==="
 
 exit "$RESULT"
