@@ -35,6 +35,15 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # Diagnostic: print the actual merged manifest for the debug variant, so a merge
+      # conflict or missing/altered <service>/<meta-data> entry is directly visible instead
+      # of inferred from behavior. Cheap (no emulator needed) so it runs even on failure.
+      - name: Dump merged debug manifest
+        run: |
+          ./gradlew :app:processDebugManifest
+          echo "=== Merged AndroidManifest.xml (debug) ==="
+          find app/build -iname "AndroidManifest.xml" -path "*ebug*" -print -exec cat {} \;
+
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -43,7 +52,17 @@ jobs:
           arch: x86_64
           profile: pixel_5
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest
+          script: |
+            adb logcat -c
+            adb logcat -v time > /tmp/full-logcat.txt &
+            LOGCAT_PID=$!
+            ./gradlew connectedDebugAndroidTest
+            RESULT=$?
+            sleep 2
+            kill $LOGCAT_PID || true
+            echo "=== Filtered logcat (accessibility / Hilt / MindfulScroll / crashes) ==="
+            grep -iE "accessibility|hilt|mindfulscroll|androidruntime|fatal exception|scrollmonitor" /tmp/full-logcat.txt || echo "(no matching lines)"
+            exit $RESULT
 
       - name: Upload instrumented test reports
         if: always()
