@@ -87,6 +87,23 @@ onboarding:
   link the user to the system settings screen to turn it on; it is never
   auto-granted.
 
+## Installing on your phone (no computer needed)
+
+Every push to `main` rebuilds a debug APK and republishes it to the
+[**Latest debug build**](../../releases/tag/latest-debug) GitHub Release.
+On your phone:
+
+1. Open that release page in your browser and download `app-debug.apk`.
+2. Tap the downloaded file. Android will ask permission to install from
+   whatever app you used (Chrome, Files, etc.) since this isn't from the
+   Play Store - allow it for that one app.
+3. Install, then walk through onboarding in the app.
+
+This is a debug build (auto-signed with a throwaway debug key, not meant
+for distribution) - fine for trying the app out, not a release artifact.
+If you'd rather build it yourself with Android Studio or the command
+line, see [Building](#building) below.
+
 ## Tech stack
 
 - Kotlin, Jetpack Compose

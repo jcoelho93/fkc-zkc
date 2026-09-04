@@ -1,0 +1,51 @@
+name: Publish debug APK
+
+# Rebuilds the debug APK on every push to main and republishes it as the
+# "latest-debug" GitHub Release, so it can be downloaded and sideloaded
+# straight from a phone browser without needing Android Studio or adb.
+# This is a debug build (uses the auto-generated debug keystore) - not
+# signed for distribution, just for trying the app out.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Publish latest-debug release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-debug
+          name: Latest debug build
+          body: |
+            Automatically rebuilt from the latest push to `main` (commit ${{ github.sha }}).
+
+            This is a debug build - not signed for distribution, just for trying the app.
+            Download `app-debug.apk` below on your phone and tap it to install; Android
+            will prompt you to allow installs from whichever app you used to open it
+            (Chrome, Files, etc.) since it isn't from the Play Store.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          prerelease: true
