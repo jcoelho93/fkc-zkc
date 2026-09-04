@@ -18,13 +18,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MindfulScrollApp()
+            MindfulScrollAppRoot()
         }
     }
 }
 
 @Composable
-private fun MindfulScrollApp() {
+private fun MindfulScrollAppRoot() {
     MindfulScrollTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             MindfulScrollNavHost()
