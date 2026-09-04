@@ -36,6 +36,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * AccessibilityService, since UiAutomation (which backs Espresso/UiAutomator) is already
  * registered as a system-wide accessibility event listener during instrumented tests - no
  * extra service registration or shell commands needed.
+ *
+ * IMPORTANT: the listener is cleared in a finally block. ScrollMonitorServiceInstrumentedTest
+ * runs right after this one in the same instrumentation process (alphabetical class order),
+ * and a still-registered UiAutomation listener from here was found to prevent that test's real
+ * AccessibilityService from ever connecting - leaving this dangling broke a completely
+ * separate, real accessibility-service registration for the rest of the test run.
  */
 @RunWith(AndroidJUnit4::class)
 class ScrollEventDetectionTest {
@@ -50,22 +56,28 @@ class ScrollEventDetectionTest {
         val contentChangedCount = AtomicInteger(0)
 
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        uiAutomation.setOnAccessibilityEventListener { event ->
-            if (event.packageName?.toString() != targetPackage) return@setOnAccessibilityEventListener
-            when (event.eventType) {
-                AccessibilityEvent.TYPE_VIEW_SCROLLED -> viewScrolledCount.incrementAndGet()
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> contentChangedCount.incrementAndGet()
+        try {
+            uiAutomation.setOnAccessibilityEventListener { event ->
+                if (event.packageName?.toString() != targetPackage) return@setOnAccessibilityEventListener
+                when (event.eventType) {
+                    AccessibilityEvent.TYPE_VIEW_SCROLLED -> viewScrolledCount.incrementAndGet()
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> contentChangedCount.incrementAndGet()
+                }
             }
-        }
 
-        // Exercising the harness itself (activity launch, tag lookup, gesture injection) is
-        // the part that should fail loudly if something regresses - JUnit fails the test on
-        // any uncaught exception here, no explicit assertion needed for that.
-        composeRule.onNodeWithTag(ScrollProbeActivity.SCROLL_PROBE_LIST_TAG).performTouchInput {
-            repeat(15) { swipeUp() }
+            // Exercising the harness itself (activity launch, tag lookup, gesture injection) is
+            // the part that should fail loudly if something regresses - JUnit fails the test on
+            // any uncaught exception here, no explicit assertion needed for that.
+            composeRule.onNodeWithTag(ScrollProbeActivity.SCROLL_PROBE_LIST_TAG).performTouchInput {
+                repeat(15) { swipeUp() }
+            }
+            composeRule.waitForIdle()
+            Thread.sleep(1_500) // accessibility events are dispatched async; give them time to land
+        } finally {
+            // See the class doc: leaving this registered was found to break a later, unrelated
+            // test's real AccessibilityService connection for the rest of the instrumentation run.
+            uiAutomation.setOnAccessibilityEventListener(null)
         }
-        composeRule.waitForIdle()
-        Thread.sleep(1_500) // accessibility events are dispatched async; give them time to land
 
         val viewScrolled = viewScrolledCount.get()
         val contentChanged = contentChangedCount.get()
