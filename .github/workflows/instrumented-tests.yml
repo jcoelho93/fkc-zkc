@@ -52,17 +52,7 @@ jobs:
           arch: x86_64
           profile: pixel_5
           disable-animations: true
-          script: |
-            adb logcat -c
-            adb logcat -v time > /tmp/full-logcat.txt &
-            LOGCAT_PID=$!
-            ./gradlew connectedDebugAndroidTest
-            RESULT=$?
-            sleep 2
-            kill $LOGCAT_PID || true
-            echo "=== Filtered logcat (accessibility / Hilt / MindfulScroll / crashes) ==="
-            grep -iE "accessibility|hilt|mindfulscroll|androidruntime|fatal exception|scrollmonitor" /tmp/full-logcat.txt || echo "(no matching lines)"
-            exit $RESULT
+          script: bash .github/scripts/run_instrumented_tests.sh
 
       - name: Upload instrumented test reports
         if: always()
