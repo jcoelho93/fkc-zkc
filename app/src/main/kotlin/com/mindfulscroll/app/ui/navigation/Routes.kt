@@ -7,4 +7,5 @@ object Routes {
     const val MAIN = "main"
     const val DASHBOARD = "main/dashboard"
     const val SETTINGS = "main/settings"
+    const val DIAGNOSTICS = "main/diagnostics"
 }

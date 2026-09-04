@@ -31,7 +31,10 @@ import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onOpenDiagnostics: () -> Unit = {},
+    viewModel: SettingsViewModel = hiltViewModel(),
+) {
     val apps by viewModel.apps.collectAsState()
     var editingApp by remember { mutableStateOf<MonitoredAppEntity?>(null) }
 
@@ -39,6 +42,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
     ) {
+        item {
+            TextButton(onClick = onOpenDiagnostics) {
+                Text("Diagnostics: is scroll detection actually working?")
+            }
+        }
         if (apps.isEmpty()) {
             item {
                 Text(

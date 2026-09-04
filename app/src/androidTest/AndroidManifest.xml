@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test-only components, merged only into the instrumented test APK - never shipped. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".ScrollProbeActivity"
+            android:exported="false" />
+    </application>
+</manifest>

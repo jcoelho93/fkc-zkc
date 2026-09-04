@@ -56,15 +56,42 @@ approach:
 - `UsageStatsManager` is used only for the aggregate "time in app" numbers
   shown on the dashboard, not for live detection - the accessibility
   events are more responsive for that.
-- A single finger-swipe can fire several `TYPE_VIEW_SCROLLED` events
-  (nested scroll containers, feed-of-feeds layouts), so scroll events for
-  the same app within ~300ms of each other are treated as one logical
-  scroll. This is a tunable MVP judgment call, not a precise measurement.
+- A single finger-swipe can fire several matching events (nested scroll
+  containers, feed-of-feeds layouts), so events for the same app within
+  ~300ms of each other are treated as one logical scroll. This is a
+  tunable MVP judgment call, not a precise measurement.
+
+**`TYPE_VIEW_SCROLLED` alone is not enough.** It's a legacy
+`View.scrollBy()`-driven event: `ScrollView`/`ListView` fire it reliably,
+but `RecyclerView` (most modern feed apps) and Jetpack Compose's
+`LazyColumn` move child content directly instead of calling
+`View.scrollBy()`, so they often don't fire it. `ScrollMonitorService`
+also listens for `TYPE_WINDOW_CONTENT_CHANGED` (new items binding in as
+you scroll a feed) as a noisier but far more reliable fallback signal,
+sharing the same debounce so it doesn't double-count when
+`TYPE_VIEW_SCROLLED` *does* fire. `ScrollEventDetectionTest` (see
+Testing below) checks this empirically against a Compose `LazyColumn`
+rather than relying on assumptions about framework internals.
 
 The interruption overlay itself is drawn as a `TYPE_ACCESSIBILITY_OVERLAY`
 window rather than a `SYSTEM_ALERT_WINDOW` - any process that owns a
 currently-enabled accessibility service is allowed to add this window
 type, so no separate "draw over other apps" permission is requested.
+
+### Diagnostics
+
+Settings has a **Diagnostics** screen (backed by `ServiceDiagnostics`, an
+in-memory singleton the accessibility service updates live) showing, in
+real time: whether the service is connected, which apps are monitored,
+the current foreground package, raw counts of `TYPE_VIEW_SCROLLED` /
+`TYPE_WINDOW_CONTENT_CHANGED` events seen from *any* app, how many of
+those were actually counted as scrolls, and a recent activity log. If the
+interruption never fires, this is the first place to look: if both raw
+counters stay at zero while you scroll a monitored app, the OS isn't
+delivering either signal for it and detection needs a different approach
+for that specific app; if the raw counters climb but nothing gets
+counted, the foreground-matching logic is the problem instead. The same
+detail is also logged to Logcat under the tag `MindfulScroll`.
 
 ## Privacy & permissions
 
@@ -133,16 +160,26 @@ Requires JDK 17 and the Android SDK (compile/target SDK 35; install via
 Android Studio's SDK Manager or `sdkmanager`).
 
 ```bash
-./gradlew build   # assembles debug + release, runs lint
-./gradlew test    # unit tests (threshold logic, Room DAOs via Robolectric)
+./gradlew build                     # assembles debug + release, runs lint
+./gradlew test                      # unit tests (threshold logic, Room DAOs via Robolectric)
+./gradlew connectedDebugAndroidTest # instrumented tests - needs a running emulator/device
 ```
 
 There is no `local.properties` checked in - point `ANDROID_HOME` /
 `sdk.dir` at your SDK install, or open the project in Android Studio and
 let it configure this for you.
 
-CI (`.github/workflows/android.yml`) runs `./gradlew build` and
-`./gradlew test` on every push and pull request against `main`.
+CI runs three workflows on every push/PR against `main`:
+`.github/workflows/android.yml` (`./gradlew build` + `./gradlew test`),
+`.github/workflows/instrumented-tests.yml` (`connectedDebugAndroidTest`
+on a real emulator via `reactivecircus/android-emulator-runner`), and
+`.github/workflows/release-apk.yml` (publishes the debug APK, `main` only).
+
+The instrumented tests exist specifically to verify device-only behavior
+that unit tests can't reach - see `ScrollEventDetectionTest` in
+`app/src/androidTest`, which checks empirically (by scrolling a real
+Compose `LazyColumn` and inspecting which `AccessibilityEvent`s actually
+fire) rather than assuming.
 
 ## Distribution
 
@@ -165,8 +202,10 @@ This is a first pass, not a finished product:
 - Session/grace-period state (e.g. the "5 more minutes" countdown window)
   lives in memory in the accessibility service and is not restored if the
   service process is killed and restarted mid-grace.
-- No instrumented (UI) tests yet - only JVM unit tests for threshold
-  logic and Room DAOs.
+- Instrumented test coverage is limited to `ScrollEventDetectionTest`
+  (validates the accessibility-event detection mechanism itself) - no UI
+  flow tests (onboarding, app selection, dashboard) yet, only JVM unit
+  tests for threshold logic and Room DAOs plus that one instrumented test.
 - The app-selection list is shown once during onboarding; there is no way
   yet to add a newly installed app to the monitored list without
   reinstalling. Existing monitored apps can be toggled on/off and

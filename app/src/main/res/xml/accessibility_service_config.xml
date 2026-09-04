@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Deliberately narrow: we only need scroll events and the window-state-change events
-  that tell us which package is now in the foreground. We do NOT request
-  canRetrieveWindowContent, flagRequestFilterKeyEvents, or any capability beyond
-  what scroll-detection + drawing the interruption overlay require.
+  Deliberately narrow: no canRetrieveWindowContent, no flagRequestFilterKeyEvents, no
+  capability beyond what scroll-detection + drawing the interruption overlay require.
+
+  typeWindowContentChanged is included alongside typeViewScrolled because
+  typeViewScrolled is a legacy View.scrollBy()-driven event: ScrollView/ListView fire
+  it reliably, but RecyclerView (most modern feed apps) and Compose's LazyColumn manage
+  scroll offset internally and often don't. typeWindowContentChanged fires far more
+  reliably during a feed scroll (new items binding in) but is noisier - see the
+  debounce/heuristic handling in ScrollMonitorService.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewScrolled|typeWindowStateChanged"
+    android:accessibilityEventTypes="typeViewScrolled|typeWindowContentChanged|typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRequestFilterKeyEvents="false"
     android:canRetrieveWindowContent="false"

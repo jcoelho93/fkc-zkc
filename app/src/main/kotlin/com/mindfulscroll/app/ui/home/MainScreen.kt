@@ -19,6 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.mindfulscroll.app.ui.dashboard.DashboardScreen
+import com.mindfulscroll.app.ui.diagnostics.DiagnosticsScreen
 import com.mindfulscroll.app.ui.navigation.Routes
 import com.mindfulscroll.app.ui.settings.SettingsScreen
 
@@ -65,7 +66,12 @@ fun MainScreen() {
             modifier = Modifier.padding(padding),
         ) {
             composable(Routes.DASHBOARD) { DashboardScreen() }
-            composable(Routes.SETTINGS) { SettingsScreen() }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) })
+            }
+            composable(Routes.DIAGNOSTICS) {
+                DiagnosticsScreen(onBack = { navController.popBackStack() })
+            }
         }
     }
 }
