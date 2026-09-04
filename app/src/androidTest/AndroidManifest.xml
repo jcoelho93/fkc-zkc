@@ -2,8 +2,16 @@
 <!-- Test-only components, merged only into the instrumented test APK - never shipped. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <!--
+          Fully-qualified name deliberately, not ".ScrollProbeActivity": the androidTest
+          manifest's own inferred package (used to resolve a relative name) is the TEST
+          APK's namespace, not the main app's - a relative name here registers the
+          component under the wrong package and ActivityScenario/PackageManager can't
+          resolve it ("Unable to resolve activity"), even though the class itself compiles
+          fine under com.mindfulscroll.app (see ScrollProbeActivity.kt's package line).
+        -->
         <activity
-            android:name=".ScrollProbeActivity"
+            android:name="com.mindfulscroll.app.ScrollProbeActivity"
             android:exported="false" />
     </application>
 </manifest>
