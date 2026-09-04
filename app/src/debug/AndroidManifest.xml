@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only (never ships in release): ScrollProbeActivity backs
+  ScrollEventDetectionTest. It has to live in this app-owned source set rather than
+  androidTest's - a component declared in the androidTest manifest belongs to the
+  separate test APK/process, and ActivityScenario refuses to launch it from the
+  app-under-test's own process ("Intent in process X resolved to different process Y").
+  Declaring it here compiles it into the debug variant itself, which
+  connectedDebugAndroidTest runs against, so there's no process mismatch.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name=".ScrollProbeActivity"
+            android:exported="false" />
+    </application>
+</manifest>

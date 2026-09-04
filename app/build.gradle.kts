@@ -63,6 +63,9 @@ android {
         getByName("main") {
             kotlin.srcDirs("src/main/kotlin")
         }
+        getByName("debug") {
+            kotlin.srcDirs("src/debug/kotlin")
+        }
         getByName("test") {
             kotlin.srcDirs("src/test/kotlin")
         }

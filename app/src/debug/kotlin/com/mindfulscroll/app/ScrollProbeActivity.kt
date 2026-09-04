@@ -16,9 +16,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 /**
- * Test-only: a long Compose LazyColumn standing in for a "feed" (Instagram/Reddit/TikTok-style)
- * so ScrollEventDetectionTest can empirically check which AccessibilityEvent types actually
- * fire when it's scrolled - see that test for why this matters.
+ * Debug-build-only: a long Compose LazyColumn standing in for a "feed"
+ * (Instagram/Reddit/TikTok-style) so ScrollEventDetectionTest can empirically check which
+ * AccessibilityEvent types actually fire when it's scrolled - see that test for why this
+ * matters. Lives in src/debug rather than src/androidTest so it compiles into the app's own
+ * debug APK - see app/src/debug/AndroidManifest.xml for why that's required.
  */
 class ScrollProbeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
