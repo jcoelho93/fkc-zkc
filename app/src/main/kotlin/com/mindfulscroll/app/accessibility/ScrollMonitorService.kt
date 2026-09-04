@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -31,12 +32,13 @@ import javax.inject.Inject
  *
  * Scroll signal: TYPE_VIEW_SCROLLED is a legacy View.scrollBy()-driven event that
  * ScrollView/ListView fire reliably but RecyclerView (most feed apps) and Compose's
- * LazyColumn often don't, since they move child views directly instead of calling
- * View.scrollBy(). TYPE_WINDOW_CONTENT_CHANGED (new items binding in as you scroll a feed)
- * is a noisier but far more reliable fallback signal for those apps - both are treated as
- * "one scroll" candidates through the same debounce, so this doesn't double count when
- * TYPE_VIEW_SCROLLED *does* fire. See ServiceDiagnostics / the in-app Diagnostics screen to
- * check which signal (if either) a given app is actually sending.
+ * LazyColumn don't - confirmed empirically by ScrollEventDetectionTest, which got zero of
+ * either TYPE_VIEW_SCROLLED or the TYPE_WINDOW_CONTENT_CHANGED fallback when scrolling a
+ * Compose LazyColumn. Both are still listened for (harmless, and may help for
+ * legacy-View-based feeds), but scroll count can't be trusted as the primary signal for
+ * Compose-heavy apps - which is why the time-based half of the threshold is checked
+ * independently below rather than only ever being evaluated when a scroll event happens to
+ * arrive. See ServiceDiagnostics / the in-app Diagnostics screen for live event counts.
  */
 @AndroidEntryPoint
 class ScrollMonitorService : AccessibilityService() {
@@ -61,6 +63,9 @@ class ScrollMonitorService : AccessibilityService() {
     private var isOverlayShowing = false
     private var currentOverlayEventId: Long? = null
     private val graceUntilMillis = mutableMapOf<String, Long>()
+
+    /** Guarantees the threshold is checked even if no scroll event ever arrives for this session. */
+    private var pendingThresholdCheckJob: Job? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -111,6 +116,7 @@ class ScrollMonitorService : AccessibilityService() {
         currentForegroundPackage = packageName
         lastForegroundChangeAtMillis = now
         lastCountedScrollAtMillis = 0L
+        pendingThresholdCheckJob?.cancel()
         diagnostics.update { it.copy(currentForegroundPackage = packageName) }
         diagnostics.log("Foreground -> $packageName")
 
@@ -125,6 +131,7 @@ class ScrollMonitorService : AccessibilityService() {
                 diagnostics.update {
                     it.copy(activeSessionPackage = packageName, activeSessionScrollCount = 0, activeSessionStartMillis = now)
                 }
+                scheduleThresholdCheck(packageName)
             }
         }
     }
@@ -149,29 +156,58 @@ class ScrollMonitorService : AccessibilityService() {
             diagnostics.log("Scroll #${session.scrollCountInSession} in $packageName (via $source)")
             Log.d(TAG, "Scroll #${session.scrollCountInSession} in $packageName via $source")
 
-            val config = monitoredApps[packageName] ?: return@launch
+            checkThresholdAndMaybeShowOverlay(packageName)
+        }
+    }
 
-            val result = ThresholdEvaluator.evaluate(
-                session = SessionState(session.scrollCountInSession, session.sessionStartMillis),
-                config = ThresholdConfig(config.scrollThreshold, config.timeThresholdMinutes),
-                nowMillis = now,
-            )
+    /**
+     * Arms a one-shot delayed check so the time-based half of the threshold fires on its own
+     * schedule, independent of whether any scroll event ever arrives. Delays until whichever
+     * comes first: the app's configured time threshold, or an active grace-period deadline.
+     */
+    private fun scheduleThresholdCheck(packageName: String) {
+        pendingThresholdCheckJob?.cancel()
+        val config = monitoredApps[packageName] ?: return
+        val now = System.currentTimeMillis()
+        val grace = graceUntilMillis[packageName]
+        val timeLimitMillis = config.timeThresholdMinutes * 60_000L
+        val delayMillis = if (grace != null) (grace - now).coerceAtLeast(0) else timeLimitMillis
 
-            val grace = graceUntilMillis[packageName]
-            val graceExpired = grace != null && now >= grace
-
-            if (result.crossed || graceExpired) {
-                graceUntilMillis.remove(packageName)
-                diagnostics.log("Threshold crossed for $packageName (reasons=${result.reasons}, graceExpired=$graceExpired) - showing overlay")
-                Log.d(TAG, "Threshold crossed for $packageName: reasons=${result.reasons} graceExpired=$graceExpired")
-                showOverlay(config, session.scrollCountInSession, now - session.sessionStartMillis)
+        pendingThresholdCheckJob = serviceScope.launch {
+            delay(delayMillis)
+            if (currentForegroundPackage == packageName && !isOverlayShowing) {
+                Log.d(TAG, "Scheduled threshold check firing for $packageName")
+                checkThresholdAndMaybeShowOverlay(packageName)
             }
+        }
+    }
+
+    private suspend fun checkThresholdAndMaybeShowOverlay(packageName: String) {
+        val session = scrollStatsRepository.getActiveSession(packageName) ?: return
+        val config = monitoredApps[packageName] ?: return
+        val now = System.currentTimeMillis()
+
+        val result = ThresholdEvaluator.evaluate(
+            session = SessionState(session.scrollCountInSession, session.sessionStartMillis),
+            config = ThresholdConfig(config.scrollThreshold, config.timeThresholdMinutes),
+            nowMillis = now,
+        )
+
+        val grace = graceUntilMillis[packageName]
+        val graceExpired = grace != null && now >= grace
+
+        if (result.crossed || graceExpired) {
+            graceUntilMillis.remove(packageName)
+            diagnostics.log("Threshold crossed for $packageName (reasons=${result.reasons}, graceExpired=$graceExpired) - showing overlay")
+            Log.d(TAG, "Threshold crossed for $packageName: reasons=${result.reasons} graceExpired=$graceExpired")
+            showOverlay(config, session.scrollCountInSession, now - session.sessionStartMillis)
         }
     }
 
     private suspend fun showOverlay(app: MonitoredAppEntity, scrollCount: Int, sessionElapsedMillis: Long) {
         val now = System.currentTimeMillis()
         isOverlayShowing = true
+        pendingThresholdCheckJob?.cancel()
         diagnostics.update { it.copy(overlaysShownCount = it.overlaysShownCount + 1) }
         currentOverlayEventId = scrollStatsRepository.recordOverlayShown(
             packageName = app.packageName,
@@ -208,6 +244,9 @@ class ScrollMonitorService : AccessibilityService() {
         if (choice == OverlayChoice.CONTINUE) {
             scrollStatsRepository.startSession(packageName, now)
             graceUntilMillis[packageName] = now + OVERLAY_GRACE_MINUTES * 60_000L
+            if (currentForegroundPackage == packageName) {
+                scheduleThresholdCheck(packageName)
+            }
         }
     }
 
@@ -219,6 +258,7 @@ class ScrollMonitorService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         overlayController.hide()
+        pendingThresholdCheckJob?.cancel()
         serviceJob?.cancel()
         diagnostics.update { it.copy(serviceConnectedAtMillis = null) }
         diagnostics.log("Service destroyed")

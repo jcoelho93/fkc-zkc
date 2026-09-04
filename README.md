@@ -61,17 +61,31 @@ approach:
   ~300ms of each other are treated as one logical scroll. This is a
   tunable MVP judgment call, not a precise measurement.
 
-**`TYPE_VIEW_SCROLLED` alone is not enough.** It's a legacy
-`View.scrollBy()`-driven event: `ScrollView`/`ListView` fire it reliably,
-but `RecyclerView` (most modern feed apps) and Jetpack Compose's
-`LazyColumn` move child content directly instead of calling
-`View.scrollBy()`, so they often don't fire it. `ScrollMonitorService`
-also listens for `TYPE_WINDOW_CONTENT_CHANGED` (new items binding in as
-you scroll a feed) as a noisier but far more reliable fallback signal,
-sharing the same debounce so it doesn't double-count when
-`TYPE_VIEW_SCROLLED` *does* fire. `ScrollEventDetectionTest` (see
-Testing below) checks this empirically against a Compose `LazyColumn`
-rather than relying on assumptions about framework internals.
+**Scroll *counting* cannot be trusted as the only trigger.** `TYPE_VIEW_SCROLLED`
+is a legacy `View.scrollBy()`-driven event: `ScrollView`/`ListView` fire
+it reliably, but `RecyclerView` (most modern feed apps) and Jetpack
+Compose's `LazyColumn` move child content directly instead of calling
+`View.scrollBy()`, so they often don't fire it - confirmed empirically,
+not assumed: `ScrollEventDetectionTest` (see Testing below) scrolls a
+real Compose `LazyColumn` 15 times on an emulator and checks which
+`AccessibilityEvent` types actually arrive. The result was zero of both
+`TYPE_VIEW_SCROLLED` and the `TYPE_WINDOW_CONTENT_CHANGED` fallback
+`ScrollMonitorService` also listens for. Both are still wired up (they
+may help for legacy View-based feeds, and cost nothing when they don't
+fire), but scroll count is a best-effort number for Compose-heavy apps,
+not a guarantee.
+
+Because of that, **the time-based half of the threshold is checked on
+its own schedule, independent of scroll events entirely**: entering a
+monitored app's foreground arms a one-shot delayed check (`delay()` in
+the service's coroutine scope) for its configured time threshold (or the
+active grace-period deadline, if shorter), which re-evaluates and shows
+the overlay if the session is still live when it fires. Scroll events,
+when they do arrive, check the same threshold immediately instead of
+waiting - whichever path notices first wins. Earlier versions of this
+service only ever evaluated the threshold from inside the scroll-event
+handler, which meant the time-based trigger silently never fired for any
+app that doesn't emit scroll events - this is why.
 
 The interruption overlay itself is drawn as a `TYPE_ACCESSIBILITY_OVERLAY`
 window rather than a `SYSTEM_ALERT_WINDOW` - any process that owns a
@@ -195,13 +209,17 @@ Play Store. This may be revisited later, but isn't a goal for the MVP.
 
 This is a first pass, not a finished product:
 
-- Scroll counting is a coarse debounce-based approximation, not a
-  precise measurement - see the detection notes above.
+- Scroll counting is a best-effort signal, not a precise measurement, and
+  is known to be zero for Compose-based feeds - see the detection notes
+  above. The time-based half of the threshold is the reliable path.
 - Only one continuous foreground session is tracked per app at a time; no
   cross-app "total scrolling today" limit.
-- Session/grace-period state (e.g. the "5 more minutes" countdown window)
-  lives in memory in the accessibility service and is not restored if the
-  service process is killed and restarted mid-grace.
+- Session/grace-period state, and the scheduled time-threshold check
+  itself, live in memory in the accessibility service (a plain
+  coroutine `delay()`) and are not restored if the service process is
+  killed and restarted mid-session - the next scroll or foreground change
+  re-arms it, but a session that both never scrolls and outlives a
+  process death in between won't trigger.
 - Instrumented test coverage is limited to `ScrollEventDetectionTest`
   (validates the accessibility-event detection mechanism itself) - no UI
   flow tests (onboarding, app selection, dashboard) yet, only JVM unit
