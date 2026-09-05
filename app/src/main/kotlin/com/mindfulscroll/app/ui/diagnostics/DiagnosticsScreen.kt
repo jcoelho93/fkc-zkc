@@ -102,11 +102,13 @@ fun DiagnosticsScreen(
                     )
                     LabelValueRow("Monitored packages", if (state.monitoredPackages.isEmpty()) "(none selected)" else state.monitoredPackages.joinToString())
                     LabelValueRow("Current foreground app", state.currentForegroundPackage ?: "(none)")
+                    LabelValueRow("Resolved serviceInfo", state.resolvedServiceInfo ?: "(not connected yet)")
                 }
             }
 
             item {
                 DiagnosticsCard(title = "Event counters (since service last (re)started)") {
+                    LabelValueRow("All events delivered (any type, any app)", state.totalEventCount.toString())
                     LabelValueRow("Raw TYPE_VIEW_SCROLLED (any app)", state.rawScrollEventCount.toString())
                     LabelValueRow("Raw TYPE_WINDOW_CONTENT_CHANGED (any app)", state.rawContentChangedEventCount.toString())
                     LabelValueRow("Scroll ticks counted", state.countedScrollTicks.toString())

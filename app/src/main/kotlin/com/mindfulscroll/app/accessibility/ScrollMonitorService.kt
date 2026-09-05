@@ -73,9 +73,22 @@ class ScrollMonitorService : AccessibilityService() {
         serviceJob = job
         serviceScope = CoroutineScope(job + Dispatchers.Main.immediate)
 
-        diagnostics.update { it.copy(serviceConnectedAtMillis = System.currentTimeMillis()) }
+        // getServiceInfo() is the system's parsed view of accessibility_service_config.xml, which
+        // is not necessarily what the XML says - and it is the mask AccessibilityManagerService
+        // actually dispatches against. A connected service with an empty event mask receives
+        // nothing while looking perfectly healthy, so record it rather than assume it.
+        val resolved = serviceInfo?.let { info ->
+            "eventTypes=0x${info.eventTypes.toString(16)} feedbackType=0x${info.feedbackType.toString(16)} " +
+                "flags=0x${info.flags.toString(16)} notificationTimeout=${info.notificationTimeout} " +
+                "packageNames=${info.packageNames?.toList()}"
+        } ?: "getServiceInfo() returned null"
+
+        diagnostics.update {
+            it.copy(serviceConnectedAtMillis = System.currentTimeMillis(), resolvedServiceInfo = resolved)
+        }
         diagnostics.log("Service connected")
-        Log.d(TAG, "onServiceConnected")
+        diagnostics.log("Resolved serviceInfo: $resolved")
+        Log.d(TAG, "onServiceConnected - resolved serviceInfo: $resolved")
 
         monitoredAppRepository.observeMonitored()
             .onEach { apps ->
@@ -88,6 +101,10 @@ class ScrollMonitorService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        // Counted before the `when` on purpose: "never called" and "called, then filtered out"
+        // are indistinguishable in every other counter, and they have opposite fixes.
+        diagnostics.update { it.copy(totalEventCount = it.totalEventCount + 1) }
+
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 handleWindowStateChanged(event.packageName?.toString())

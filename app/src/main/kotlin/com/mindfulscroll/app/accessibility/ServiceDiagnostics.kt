@@ -10,6 +10,20 @@ data class ServiceDiagnosticsState(
     val serviceConnectedAtMillis: Long? = null,
     val monitoredPackages: Set<String> = emptySet(),
     val currentForegroundPackage: String? = null,
+    /**
+     * EVERY event delivered to onAccessibilityEvent, of any type, counted before the type
+     * `when` and before any filtering. Distinguishes "the OS never called us at all" from
+     * "it called us and our own filtering discarded everything" - the two have identical
+     * symptoms in every other counter here.
+     */
+    val totalEventCount: Long = 0,
+    /**
+     * What the service's own getServiceInfo() reported at connect time: the event-type mask,
+     * feedback type and flags as the *system* parsed accessibility_service_config.xml, not as
+     * the XML reads. A service can be bound and connected while the system holds an event mask
+     * that excludes everything, in which case no event is ever dispatched to it.
+     */
+    val resolvedServiceInfo: String? = null,
     /** TYPE_VIEW_SCROLLED events seen from ANY app, before any filtering - proves the OS is delivering them at all. */
     val rawScrollEventCount: Long = 0,
     /** TYPE_WINDOW_CONTENT_CHANGED events seen from ANY app - the fallback signal, see accessibility_service_config.xml. */

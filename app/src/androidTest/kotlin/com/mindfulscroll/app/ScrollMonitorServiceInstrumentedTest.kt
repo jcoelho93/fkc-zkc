@@ -1,8 +1,11 @@
 package com.mindfulscroll.app
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
+import android.content.Context
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import android.view.accessibility.AccessibilityManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,10 +50,12 @@ class ScrollMonitorServiceInstrumentedTest {
     private lateinit var diagnostics: ServiceDiagnostics
     private lateinit var componentName: String
     private lateinit var uiAutomation: UiAutomation
+    private lateinit var targetContext: Context
 
     @Before
     fun setUp() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        targetContext = context
         diagnostics = EntryPointAccessors.fromApplication(
             context.applicationContext,
             DiagnosticsEntryPoint::class.java,
@@ -117,13 +122,29 @@ class ScrollMonitorServiceInstrumentedTest {
         val finalState = diagnostics.state.value
         Log.i(
             "ScrollMonitorServiceTest",
-            "currentForegroundPackage=${finalState.currentForegroundPackage} recentLog=${finalState.recentLog}",
+            "currentForegroundPackage=${finalState.currentForegroundPackage} " +
+                "totalEventCount=${finalState.totalEventCount} " +
+                "resolvedServiceInfo=${finalState.resolvedServiceInfo} recentLog=${finalState.recentLog}",
         )
+
+        if (!gotForegroundEvent) {
+            // Three independent views of the same question, because the counters alone can't
+            // separate the candidate causes:
+            //   - totalEventCount (above) separates "never dispatched to us" from "dispatched
+            //     and discarded by our own `when`".
+            //   - the system's own AccessibilityServiceInfo shows the event mask AMS dispatches
+            //     against, which is what the XML *became*, not what it says.
+            //   - dumpsys accessibility shows AMS's whole picture: bound services, and any
+            //     UiAutomation service sitting alongside ours.
+            Log.i("ScrollMonitorServiceTest", "enabled services per AccessibilityManager: " + describeEnabledServices())
+            Log.i("ScrollMonitorServiceTest", "dumpsys accessibility:\n" + runShellCommandForOutput("dumpsys accessibility"))
+        }
 
         assertTrue(
             "ScrollMonitorService connected but never received a single " +
                 "TYPE_WINDOW_STATE_CHANGED event within 15s of launching an activity " +
-                "(currentForegroundPackage stayed null; recent log: ${finalState.recentLog}). " +
+                "(currentForegroundPackage stayed null; totalEventCount=${finalState.totalEventCount}; " +
+                "resolvedServiceInfo=${finalState.resolvedServiceInfo}; recent log: ${finalState.recentLog}). " +
                 "This is a basic, virtually-always-fires event, so if this fails the service " +
                 "isn't receiving ANY accessibility events at all - the bug is in event " +
                 "delivery/registration, not anything scroll-specific.",
@@ -156,6 +177,18 @@ class ScrollMonitorServiceInstrumentedTest {
             Thread.sleep(intervalMillis)
         }
         return condition()
+    }
+
+    /** The system's own parsed view of every enabled service - the event mask AMS dispatches against. */
+    private fun describeEnabledServices(): String {
+        val manager = targetContext.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val services = manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        if (services.isEmpty()) return "<none>"
+        return services.joinToString(separator = "\n") { info ->
+            "  ${info.id}: eventTypes=0x${info.eventTypes.toString(16)} " +
+                "feedbackType=0x${info.feedbackType.toString(16)} flags=0x${info.flags.toString(16)} " +
+                "packageNames=${info.packageNames?.toList()}"
+        }
     }
 
     /** Blocks until the shell command's output stream is fully drained, so it has actually completed. */
