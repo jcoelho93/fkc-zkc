@@ -37,11 +37,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * registered as a system-wide accessibility event listener during instrumented tests - no
  * extra service registration or shell commands needed.
  *
- * IMPORTANT: the listener is cleared in a finally block. ScrollMonitorServiceInstrumentedTest
- * runs right after this one in the same instrumentation process (alphabetical class order),
- * and a still-registered UiAutomation listener from here was found to prevent that test's real
- * AccessibilityService from ever connecting - leaving this dangling broke a completely
- * separate, real accessibility-service registration for the rest of the test run.
+ * The listener is cleared in a finally block as ordinary hygiene - it is a process-wide
+ * registration on a shared UiAutomation instance. It was once believed to be what stopped
+ * ScrollMonitorServiceInstrumentedTest's real AccessibilityService from connecting; it isn't.
+ * That is caused by UiAutomation suppressing other accessibility services whenever it is
+ * connected without FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES - independent of whether any
+ * listener is set. See that test's setUp() for the fix.
  */
 @RunWith(AndroidJUnit4::class)
 class ScrollEventDetectionTest {
@@ -74,8 +75,6 @@ class ScrollEventDetectionTest {
             composeRule.waitForIdle()
             Thread.sleep(1_500) // accessibility events are dispatched async; give them time to land
         } finally {
-            // See the class doc: leaving this registered was found to break a later, unrelated
-            // test's real AccessibilityService connection for the rest of the instrumentation run.
             uiAutomation.setOnAccessibilityEventListener(null)
         }
 

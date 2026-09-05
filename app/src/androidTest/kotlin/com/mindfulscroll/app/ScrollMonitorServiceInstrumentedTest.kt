@@ -28,15 +28,18 @@ import org.junit.runner.RunWith
  * basic and unconditional an accessibility event as exists, so if this doesn't fire the
  * problem is in event delivery/registration, not anything scroll-specific.
  *
- * First attempt on CI failed at the "connects within 10s" step. That's a materially different
- * symptom than the original bug report (there, the Diagnostics screen showed "Connected: Yes"
- * as a settled state, just with zero events after) - so either the settings-writing sequence
- * here is wrong, or 10s genuinely isn't enough on a loaded CI emulator. This version fixes a
- * likely ordering issue (enabled_accessibility_services should be written before the
- * accessibility_enabled master switch, not after - the latter is what should trigger
- * AccessibilityManagerService to (re)read the former), reads back both values to confirm the
- * writes actually took, and logs progress every 2s with a much longer timeout so a real
- * failure produces a much clearer picture than "never connected" alone.
+ * This test spent several CI rounds failing at its own first step - "service never connected" -
+ * while the settings read back exactly as written and AccessibilityManagerService logged
+ * nothing at all. The cause turned out to be the test harness, not the app: a connected
+ * UiAutomation suppresses every other accessibility service on the device unless it is created
+ * with FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES, and AMS implements that suppression by
+ * quietly not binding those services. Silent by design, which is why widening the logcat grep
+ * kept turning up nothing. See setUp() for the flag; that silence is also why this test now
+ * dumps `dumpsys accessibility` when the connection step fails.
+ *
+ * Note this was never the bug from the original report - there the service *did* connect
+ * ("Connected: Yes" as a settled state) and simply received no events. Suppression only ever
+ * blocked this test from reaching the question it exists to ask.
  */
 @RunWith(AndroidJUnit4::class)
 class ScrollMonitorServiceInstrumentedTest {
@@ -53,7 +56,15 @@ class ScrollMonitorServiceInstrumentedTest {
             DiagnosticsEntryPoint::class.java,
         ).serviceDiagnostics()
         componentName = "${context.packageName}/com.mindfulscroll.app.accessibility.ScrollMonitorService"
-        uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        // FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES is load-bearing, not a tweak: by default a
+        // connected UiAutomation suppresses every other accessibility service on the device, and
+        // AccessibilityManagerService enforces that by silently declining to bind them (see
+        // UiAutomationManager.suppressingAccessibilityServicesLocked - there is no log, no error,
+        // the service simply never connects). Every instrumented test holds a UiAutomation, and
+        // this test needs one anyway to run `settings put`, so without this flag the test's own
+        // harness is what prevents the service it is trying to enable from ever starting.
+        uiAutomation = InstrumentationRegistry.getInstrumentation()
+            .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
     }
 
     @After
@@ -80,6 +91,10 @@ class ScrollMonitorServiceInstrumentedTest {
             diagnostics.state.value.isServiceConnected
         }
         if (!connected) {
+            // `dumpsys accessibility` lists the bound services and any UiAutomation service that
+            // is suppressing them - i.e. it distinguishes "never registered", "registered but not
+            // bound" and "suppressed" directly, instead of leaving them to be inferred.
+            Log.i("ScrollMonitorServiceTest", "dumpsys accessibility:\n" + runShellCommandForOutput("dumpsys accessibility"))
             fail(
                 "ScrollMonitorService never connected within 30s after enabling " +
                     "$componentName. Settings read back as: " +
