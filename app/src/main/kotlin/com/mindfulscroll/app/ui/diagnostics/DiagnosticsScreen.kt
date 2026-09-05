@@ -113,6 +113,7 @@ fun DiagnosticsScreen(
                     LabelValueRow("Raw TYPE_WINDOW_CONTENT_CHANGED (any app)", state.rawContentChangedEventCount.toString())
                     LabelValueRow("Scroll ticks counted", state.countedScrollTicks.toString())
                     LabelValueRow("Overlays shown", state.overlaysShownCount.toString())
+                    LabelValueRow("Last overlay error", state.lastOverlayError ?: "(none)")
                     Text(
                         "If both raw counters stay at 0 while you scroll a monitored app, the " +
                             "OS isn't delivering scroll-related accessibility events to us at all - " +

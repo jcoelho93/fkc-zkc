@@ -39,7 +39,14 @@ data class ServiceDiagnosticsState(
     val activeSessionPackage: String? = null,
     val activeSessionScrollCount: Int = 0,
     val activeSessionStartMillis: Long? = null,
+    /** Overlay windows that were actually added - not merely attempted. */
     val overlaysShownCount: Long = 0,
+    /**
+     * Why the last overlay attempt failed, or null if the last one worked. An overlay that fails
+     * to display looks exactly like a threshold that never fired, so the reason is recorded
+     * rather than left to be inferred.
+     */
+    val lastOverlayError: String? = null,
     /** Newest first, capped - enough to see what just happened without adb. */
     val recentLog: List<String> = emptyList(),
 ) {

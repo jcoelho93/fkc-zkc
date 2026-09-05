@@ -90,6 +90,10 @@ class ScrollMonitorService : AccessibilityService() {
                 resolvedEventTypes = serviceInfo?.eventTypes ?: 0,
             )
         }
+        // TYPE_ACCESSIBILITY_OVERLAY windows are only permitted from this service's own context,
+        // so the controller cannot get one by injection - it has to be handed ours while we live.
+        overlayController.attach(this)
+
         diagnostics.log("Service connected")
         diagnostics.log("Resolved serviceInfo: $resolved")
         Log.d(TAG, "onServiceConnected - resolved serviceInfo: $resolved")
@@ -229,15 +233,8 @@ class ScrollMonitorService : AccessibilityService() {
         val now = System.currentTimeMillis()
         isOverlayShowing = true
         pendingThresholdCheckJob?.cancel()
-        diagnostics.update { it.copy(overlaysShownCount = it.overlaysShownCount + 1) }
-        currentOverlayEventId = scrollStatsRepository.recordOverlayShown(
-            packageName = app.packageName,
-            nowMillis = now,
-            scrollCountAtTrigger = scrollCount,
-            sessionTimeMillisAtTrigger = sessionElapsedMillis,
-        )
 
-        overlayController.show(
+        val shown = overlayController.show(
             state = OverlayUiState(
                 appLabel = app.appLabel,
                 scrollCount = scrollCount,
@@ -251,6 +248,29 @@ class ScrollMonitorService : AccessibilityService() {
             onContinue = {
                 serviceScope.launch { resolveOverlay(app.packageName, OverlayChoice.CONTINUE) }
             },
+        )
+
+        if (!shown) {
+            // Critical: clear the flag. Leaving it set after a window that never appeared makes
+            // handleScroll() and every scheduled threshold check return early from here on, so a
+            // single failed overlay would silently stop all scroll counting until the service
+            // restarted - a much worse symptom than the missing overlay itself.
+            isOverlayShowing = false
+            val reason = overlayController.lastFailureReason
+            diagnostics.update { it.copy(lastOverlayError = reason) }
+            diagnostics.log("Overlay FAILED to display for ${app.packageName}: $reason")
+            Log.e(TAG, "Overlay failed to display for ${app.packageName}: $reason")
+            return
+        }
+
+        diagnostics.update {
+            it.copy(overlaysShownCount = it.overlaysShownCount + 1, lastOverlayError = null)
+        }
+        currentOverlayEventId = scrollStatsRepository.recordOverlayShown(
+            packageName = app.packageName,
+            nowMillis = now,
+            scrollCountAtTrigger = scrollCount,
+            sessionTimeMillisAtTrigger = sessionElapsedMillis,
         )
     }
 
@@ -278,7 +298,7 @@ class ScrollMonitorService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        overlayController.hide()
+        overlayController.detach()
         pendingThresholdCheckJob?.cancel()
         serviceJob?.cancel()
         diagnostics.update { it.copy(serviceConnectedAtMillis = null) }
