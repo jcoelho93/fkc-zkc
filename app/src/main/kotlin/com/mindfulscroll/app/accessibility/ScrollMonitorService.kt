@@ -84,7 +84,11 @@ class ScrollMonitorService : AccessibilityService() {
         } ?: "getServiceInfo() returned null"
 
         diagnostics.update {
-            it.copy(serviceConnectedAtMillis = System.currentTimeMillis(), resolvedServiceInfo = resolved)
+            it.copy(
+                serviceConnectedAtMillis = System.currentTimeMillis(),
+                resolvedServiceInfo = resolved,
+                resolvedEventTypes = serviceInfo?.eventTypes ?: 0,
+            )
         }
         diagnostics.log("Service connected")
         diagnostics.log("Resolved serviceInfo: $resolved")

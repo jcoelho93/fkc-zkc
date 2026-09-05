@@ -111,6 +111,21 @@ class ScrollMonitorServiceInstrumentedTest {
             )
         }
 
+        // Connecting is not the same as being subscribed to anything. If the config XML never
+        // reached the system the mask is 0, the service looks perfectly healthy, and no event is
+        // ever dispatched - the exact silent failure that cost this project several rounds. Assert
+        // it separately so the symptom is named rather than showing up as "no events, cause unknown".
+        val resolvedEventTypes = diagnostics.state.value.resolvedEventTypes
+        assertTrue(
+            "ScrollMonitorService connected but the system resolved an event-type mask of 0x" +
+                "${resolvedEventTypes.toString(16)} for it, so AccessibilityManagerService will " +
+                "never dispatch it a single event. This means accessibility_service_config.xml " +
+                "never reached the system - almost always a wrong <meta-data> android:name in " +
+                "AndroidManifest.xml (it must be exactly \"android.accessibilityservice\"). " +
+                "Resolved info: ${diagnostics.state.value.resolvedServiceInfo}",
+            resolvedEventTypes != 0,
+        )
+
         Log.i("ScrollMonitorServiceTest", "Service connected, launching an activity to trigger a window-state-change event")
         val scenario = ActivityScenario.launch(ScrollProbeActivity::class.java)
 

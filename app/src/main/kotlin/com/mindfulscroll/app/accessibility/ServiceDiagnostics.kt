@@ -24,6 +24,12 @@ data class ServiceDiagnosticsState(
      * that excludes everything, in which case no event is ever dispatched to it.
      */
     val resolvedServiceInfo: String? = null,
+    /**
+     * The event-type mask the system resolved for us, as an int so it can be asserted on.
+     * 0 means the config XML never reached the system - see the meta-data comment in
+     * AndroidManifest.xml. A 0 mask means no event is ever dispatched to the service.
+     */
+    val resolvedEventTypes: Int = 0,
     /** TYPE_VIEW_SCROLLED events seen from ANY app, before any filtering - proves the OS is delivering them at all. */
     val rawScrollEventCount: Long = 0,
     /** TYPE_WINDOW_CONTENT_CHANGED events seen from ANY app - the fallback signal, see accessibility_service_config.xml. */

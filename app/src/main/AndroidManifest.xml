@@ -64,8 +64,19 @@
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
+            <!--
+              The meta-data NAME is "android.accessibilityservice" (AccessibilityService.
+              SERVICE_META_DATA). It is not the config file's name - that is what
+              android:resource points at. Getting this wrong fails completely silently:
+              the service still installs, is listed in Settings, binds, and calls
+              onServiceConnected(), but AccessibilityServiceInfo's constructor takes an
+              early `if (parser == null) return;` and leaves eventTypes/feedbackType at 0,
+              so AccessibilityManagerService never dispatches a single event to it. No
+              exception, no log, on any device. See ScrollMonitorServiceInstrumentedTest,
+              which asserts on the resolved event mask to keep this from regressing.
+            -->
             <meta-data
-                android:name="android.accessibilityservice.accessibility_service_config"
+                android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
