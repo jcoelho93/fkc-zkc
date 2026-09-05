@@ -130,20 +130,29 @@ onboarding:
 
 ## Installing on your phone (no computer needed)
 
-Every push to `main` rebuilds a debug APK and republishes it to the
-[**Latest debug build**](../../releases/tag/latest-debug) GitHub Release.
-On your phone:
+**Recommended: [Obtainium](https://github.com/ImranR98/Obtainium).** Install
+Obtainium, add this repository as an app source, and it will check for new
+[Releases](../../releases), notify you, and install them in place. Set up
+once, then updates need nothing from you.
 
-1. Open that release page in your browser and download `app-debug.apk`.
-2. Tap the downloaded file. Android will ask permission to install from
-   whatever app you used (Chrome, Files, etc.) since this isn't from the
-   Play Store - allow it for that one app.
-3. Install, then walk through onboarding in the app.
+The reason to prefer it over downloading the APK by hand isn't just
+convenience. Obtainium installs through Android's session-based package
+installer, so:
 
-This is a debug build (auto-signed with a throwaway debug key, not meant
-for distribution) - fine for trying the app out, not a release artifact.
-If you'd rather build it yourself with Android Studio or the command
-line, see [Building](#building) below.
+- updates replace the installed app instead of being a fresh install, which
+  means **the accessibility permission you grant once keeps working** rather
+  than needing to be re-enabled every time; and
+- the app is treated as coming from an app store, which avoids Android 13+
+  putting the accessibility toggle behind *App info -> ⋮ -> "Allow
+  restricted settings"*.
+
+You can still download `app-release.apk` from a release and tap it, but a
+manual install is a fresh install and you'll get both of the prompts above
+each time.
+
+Either way this is a real signed release build, not the debug-keystore APK
+this project used to publish - which is what Play Protect was flagging.
+To build it yourself instead, see [Building](#building) below.
 
 ## Tech stack
 
@@ -197,13 +206,36 @@ fire) rather than assuming.
 
 ## Distribution
 
-Play Store review is known to be strict about apps that use the
-Accessibility API for anything other than assisting users with
-disabilities, and an app whose *core* feature is accessibility-service-based
-monitoring is a plausible rejection/removal target even with a clear,
-honest description. To avoid that friction for this MVP, the plan is to
-ship via **F-Droid and GitHub Releases (sideloaded APK)** rather than the
-Play Store. This may be revisited later, but isn't a goal for the MVP.
+Ships as a **signed APK on GitHub Releases**, installed and updated via
+[Obtainium](https://github.com/ImranR98/Obtainium). No gatekeeper, no review
+queue, and updates land in place.
+
+Cutting a release:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+That triggers `.github/workflows/release-apk.yml`, which builds a signed
+release APK and publishes it as `v0.2.0`. `versionCode` is derived from the
+tag, so it increases on every release - it has to, or nothing can tell a new
+build from the installed one. The workflow needs four repository secrets
+(`SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`, `SIGNING_KEY_ALIAS`,
+`SIGNING_KEY_PASSWORD`); they're documented at the top of that file. The
+signing key is the app's identity to Android - back it up, because replacing
+it forces everyone to uninstall and start over rather than update.
+
+**Not the Play Store.** Play review is strict about the Accessibility API
+being used for anything other than assisting users with disabilities. This
+app isn't eligible for the `isAccessibilityTool` declaration (that's reserved
+for genuine disability tools), so listing it would require an accessibility
+declaration, a prominent in-app disclosure and an affirmative consent flow,
+under the tighter review that took effect in January 2026 - with real
+rejection risk at the end of it.
+
+**F-Droid** remains a good later addition: the GPL-3.0 license fits, and a
+self-hosted repo would reuse the same signed artifacts. Not set up yet.
 
 ## MVP limitations / known gaps
 

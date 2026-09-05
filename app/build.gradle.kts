@@ -6,6 +6,33 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+/**
+ * Release version comes from the git tag the publish workflow builds (tag `v0.2.0` sets
+ * VERSION_NAME=0.2.0); local builds fall back to a dev version.
+ *
+ * versionCode is derived from versionName rather than hand-maintained because it MUST increase on
+ * every release. Android, Obtainium and F-Droid all use it to tell a new build from the installed
+ * one, and a permanently-constant versionCode is what previously forced an uninstall-and-reinstall
+ * for every update - which in turn meant re-granting the accessibility permission every time.
+ */
+val appVersionName: String = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "0.0.0-dev"
+
+val appVersionCode: Int = appVersionName.substringBefore('-')
+    .split('.')
+    .let { parts ->
+        val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+        major * 1_000_000 + minor * 1_000 + patch
+    }
+    .coerceAtLeast(1)
+
+/**
+ * Written by the publish workflow after it decodes the keystore secret; absent for local builds,
+ * which then produce an unsigned release APK instead of failing.
+ */
+val releaseKeystorePath: String? = System.getenv("SIGNING_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.mindfulscroll.app"
     compileSdk = 35
@@ -14,14 +41,31 @@ android {
         applicationId = "com.mindfulscroll.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // Local val so Kotlin can smart-cast it; a script-level property can't be smart-cast.
+            val path = releaseKeystorePath
+            if (path != null) {
+                storeFile = file(path)
+                storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Only wired up when the workflow supplied a keystore. Without this guard a local
+            // `assembleRelease` would fail on a signing config with a null storeFile instead of
+            // just producing an unsigned APK.
+            signingConfig = if (releaseKeystorePath != null) signingConfigs.getByName("release") else null
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

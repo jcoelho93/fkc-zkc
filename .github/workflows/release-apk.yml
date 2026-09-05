@@ -1,14 +1,27 @@
-name: Publish debug APK
+name: Publish release APK
 
-# Rebuilds the debug APK on every push to main and republishes it as the
-# "latest-debug" GitHub Release, so it can be downloaded and sideloaded
-# straight from a phone browser without needing Android Studio or adb.
-# This is a debug build (uses the auto-generated debug keystore) - not
-# signed for distribution, just for trying the app out.
+# Builds a SIGNED release APK and publishes it as an immutable, versioned GitHub Release - the
+# feed Obtainium polls on the phone (and the artifact any future F-Droid repo would be built on).
+#
+# Tag-triggered rather than push-to-main on purpose: every published release becomes an update
+# notification on your phone, and versionCode is derived from the tag. Cut one with:
+#
+#     git tag v0.2.0 && git push origin v0.2.0
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   SIGNING_KEYSTORE_BASE64    output of `base64 -w0 mindful-scroll-release.jks`
+#   SIGNING_KEYSTORE_PASSWORD  keystore password
+#   SIGNING_KEY_ALIAS          key alias (e.g. mindful-scroll)
+#   SIGNING_KEY_PASSWORD       key password
+#
+# The signing key IS the app's identity to Android. Back it up somewhere you won't lose it:
+# replacing it forces every install (including yours) to be uninstalled and set up from scratch
+# rather than updated in place.
 
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -32,20 +45,62 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Derive version from tag
+        id: version
+        run: echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Publish latest-debug release
+      - name: Decode signing keystore
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::SIGNING_KEYSTORE_BASE64 is not set - see the comment at the top of this workflow."
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed release APK
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      # A wrong secret produces an APK that installs but can never update the one already on the
+      # phone (signature mismatch), which is painful to discover later. Fail here instead.
+      - name: Verify the APK is signed with the release key
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::$APK not found - the build produced an unsigned APK, so signing didn't take effect."
+            exit 1
+          fi
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -r | head -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-debug
-          name: Latest debug build
+          name: v${{ steps.version.outputs.name }}
           body: |
-            Automatically rebuilt from the latest push to `main` (commit ${{ github.sha }}).
+            Signed release build of Mindful Scroll v${{ steps.version.outputs.name }} (commit ${{ github.sha }}).
 
-            This is a debug build - not signed for distribution, just for trying the app.
-            Download `app-debug.apk` below on your phone and tap it to install; Android
-            will prompt you to allow installs from whichever app you used to open it
-            (Chrome, Files, etc.) since it isn't from the Play Store.
-          files: app/build/outputs/apk/debug/app-debug.apk
-          prerelease: true
+            **Recommended: install via [Obtainium](https://github.com/ImranR98/Obtainium)** and point
+            it at this repository. Obtainium checks for new releases, installs them in place, and
+            uses Android's session-based installer - which means the accessibility permission you
+            grant once keeps working across updates instead of needing to be re-enabled every time.
+
+            You can also download `app-release.apk` directly and tap it, but a manual install is a
+            fresh install: Android will ask you to allow installs from your browser, and on Android
+            13+ you may need App info -> ⋮ -> "Allow restricted settings" before the accessibility
+            service can be turned on.
+          files: app/build/outputs/apk/release/app-release.apk
+          fail_on_unmatched_files: true
+
+      - name: Remove decoded keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
