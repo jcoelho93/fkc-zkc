@@ -22,7 +22,7 @@ import com.mindfulscroll.app.data.entity.OverlayEventEntity
         OverlayEventEntity::class,
         IntentionEntity::class,
     ],
-    version = 3,
+    version = 4,
     // Turned on with the first real migration (1 -> 2, intention capture). The exported JSON in
     // app/schemas is what lets a future migration be tested against the schema it actually
     // starts from, rather than against one written from memory.

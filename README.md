@@ -20,15 +20,22 @@ No account, no cloud sync, no analytics, no ads — and no network permission, s
    or a keystroke from the app underneath; ignore it and it goes away. Turn it off in Settings.
 3. **Thresholds** — per app, default **40 scrolls or 10 minutes of continuous foreground
    time**, whichever comes first.
-4. **Pause screen** — a full-screen overlay showing your scroll count and session time, the
-   prompt *"What are you looking for right now?"*, and two choices: close the app, or continue.
-   Both are available immediately — the countdown and typed-phrase gates were removed, because
-   raising the cost of continuing never surfaced *why* you opened the app. Continuing gives you
-   5 more minutes before the pause screen returns.
+4. **Pause screen** — a full-screen overlay built around *urge-surfing*: a slow breathing ring
+   and *"notice the urge to keep scrolling — it usually peaks and fades within a minute or two
+   if you watch it instead of acting on it."* After a configurable interval (default 20s) it
+   recalls what you said at step 2 and asks whether you got it — *Yes / Kind of / Not really*.
+   Then: close the app, or keep scrolling. Continuing gives you 5 more minutes before the pause
+   returns.
+
+   **Neither exit is ever gated.** Both buttons are live from the first frame; the interval
+   reveals the question, it does not unlock anything. The old countdown and type-a-phrase gates
+   were removed because raising the cost of continuing never surfaced *why* you opened the app.
+   Nothing here is scored, ranked or totalled — "Not really" is not a failure, and there are no
+   streaks.
 5. **Dashboard** — scrolls and time in app for today and the past 7 days, plus how often you
    closed vs. continued.
-6. **Settings** — toggle apps, edit thresholds, and a **Diagnostics** screen
-   for when detection misbehaves.
+6. **Settings** — toggle apps, add or remove them, edit thresholds and the pause length, and
+   a **Diagnostics** screen for when detection misbehaves.
 
 The chips are deliberately not framed as good or bad: "Habit" and "Distraction" are honest
 answers, and nothing scores you for giving them.

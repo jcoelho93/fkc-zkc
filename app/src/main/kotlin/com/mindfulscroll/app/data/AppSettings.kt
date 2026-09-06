@@ -48,10 +48,49 @@ class AppSettings @Inject constructor(
         _isIntentionCaptureEnabled.value = enabled
     }
 
-    private companion object {
-        const val KEY_INTENTION_CAPTURE = "intention_capture_enabled"
+    private val _pauseDurationSeconds = MutableStateFlow(
+        prefs.getInt(KEY_PAUSE_DURATION_SECONDS, DEFAULT_PAUSE_DURATION_SECONDS),
+    )
+
+    /**
+     * How long the urge-surfing part of the pause screen runs before the outcome question
+     * appears. It never gates the exits - both are live from the first frame - so this is the
+     * length of an invitation, not of a lock.
+     */
+    val pauseDurationSeconds: StateFlow<Int> = _pauseDurationSeconds.asStateFlow()
+
+    /** Read on the hot path when the overlay is about to be shown - see the class doc. */
+    fun pauseDurationSecondsNow(): Int =
+        prefs.getInt(KEY_PAUSE_DURATION_SECONDS, DEFAULT_PAUSE_DURATION_SECONDS)
+            .coerceIn(MIN_PAUSE_DURATION_SECONDS, MAX_PAUSE_DURATION_SECONDS)
+
+    fun setPauseDurationSeconds(seconds: Int) {
+        val clamped = seconds.coerceIn(MIN_PAUSE_DURATION_SECONDS, MAX_PAUSE_DURATION_SECONDS)
+        prefs.edit { putInt(KEY_PAUSE_DURATION_SECONDS, clamped) }
+        _pauseDurationSeconds.value = clamped
+    }
+
+    companion object {
+        private const val KEY_INTENTION_CAPTURE = "intention_capture_enabled"
 
         /** On by default: the feature is the point of the app, and it is one tap to turn off. */
-        const val DEFAULT_INTENTION_CAPTURE = true
+        private const val DEFAULT_INTENTION_CAPTURE = true
+
+        private const val KEY_PAUSE_DURATION_SECONDS = "pause_duration_seconds"
+
+        /**
+         * Twenty seconds, from the urge-surfing evidence the pause is built on: a craving observed
+         * rather than acted on starts subsiding within a minute or two, and the point is to be
+         * present for the start of that curve, not to sit out the whole of it. Long enough to
+         * notice the urge; short enough that it does not itself become the friction this app
+         * stopped using.
+         *
+         * Public because the Settings slider and the tests need the same bounds this class clamps
+         * to - two copies of a range is how a slider ends up offering a value the setter rejects.
+         */
+        const val DEFAULT_PAUSE_DURATION_SECONDS = 20
+
+        const val MIN_PAUSE_DURATION_SECONDS = 5
+        const val MAX_PAUSE_DURATION_SECONDS = 60
     }
 }

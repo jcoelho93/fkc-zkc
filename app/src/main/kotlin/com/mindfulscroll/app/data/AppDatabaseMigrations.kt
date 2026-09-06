@@ -72,5 +72,24 @@ val MIGRATION_2_3 = Migration(2, 3) { db: SupportSQLiteDatabase ->
     )
 }
 
+/**
+ * The mindful pause (#5) records intention, outcome and choice as one row, so overlay_events
+ * gains the intention half.
+ *
+ * Purely additive, and pointedly so after MIGRATION_2_3: all three columns are nullable, which
+ * means plain ALTER TABLE ADD COLUMN with no table rebuild and nothing to copy. Existing rows keep
+ * every value they had and get nulls for the new ones - which is also semantically right, since
+ * pauses shown before this release genuinely had no intention recorded against them.
+ *
+ * Column types are taken from Room's exported schema
+ * (app/schemas/com.mindfulscroll.app.data.AppDatabase/4.json): INTEGER for the id, TEXT for both
+ * enums, all nullable. Room verifies the result on open, so a mismatched affinity fails at startup.
+ */
+val MIGRATION_3_4 = Migration(3, 4) { db: SupportSQLiteDatabase ->
+    db.execSQL("ALTER TABLE `overlay_events` ADD COLUMN `intentionId` INTEGER")
+    db.execSQL("ALTER TABLE `overlay_events` ADD COLUMN `intentionKind` TEXT")
+    db.execSQL("ALTER TABLE `overlay_events` ADD COLUMN `outcome` TEXT")
+}
+
 /** Every migration, in one place, so DatabaseModule cannot forget to register one. */
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)

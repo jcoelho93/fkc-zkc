@@ -27,6 +27,12 @@ class SettingsViewModel @Inject constructor(
         appSettings.setIntentionCaptureEnabled(enabled)
     }
 
+    val pauseDurationSeconds: StateFlow<Int> = appSettings.pauseDurationSeconds
+
+    fun setPauseDurationSeconds(seconds: Int) {
+        appSettings.setPauseDurationSeconds(seconds)
+    }
+
     fun setMonitored(app: MonitoredAppEntity, monitored: Boolean) {
         viewModelScope.launch { monitoredAppRepository.setMonitored(app, monitored) }
     }

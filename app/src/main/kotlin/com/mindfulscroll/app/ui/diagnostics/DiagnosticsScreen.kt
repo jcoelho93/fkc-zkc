@@ -143,6 +143,7 @@ fun DiagnosticsScreen(
                     LabelValueRow("Prompt windows added", state.intentionPromptsShownCount.toString())
                     LabelValueRow("Prompt windows actually drawn", state.intentionPromptsRenderedCount.toString())
                     LabelValueRow("Prompts answered", state.intentionsAnsweredCount.toString())
+                    LabelValueRow("Pause outcomes answered", state.pauseOutcomesAnsweredCount.toString())
                     LabelValueRow("Last prompt render", state.lastIntentionPromptRender ?: "(no prompt attempted yet)")
                     LabelValueRow("Last prompt error", state.lastIntentionPromptError ?: "(none)")
                     Text(

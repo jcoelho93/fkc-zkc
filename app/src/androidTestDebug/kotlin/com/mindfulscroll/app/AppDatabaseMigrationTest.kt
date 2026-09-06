@@ -10,9 +10,13 @@ import com.mindfulscroll.app.data.ALL_MIGRATIONS
 import com.mindfulscroll.app.data.AppDatabase
 import com.mindfulscroll.app.data.MIGRATION_1_2
 import com.mindfulscroll.app.data.MIGRATION_2_3
+import com.mindfulscroll.app.data.MIGRATION_3_4
 import com.mindfulscroll.app.data.entity.IntentionEntity
 import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
+import com.mindfulscroll.app.data.entity.OverlayChoice
+import com.mindfulscroll.app.data.entity.PauseOutcome
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -144,9 +148,10 @@ class AppDatabaseMigrationTest {
             )
         }
 
-        // Reopening through Room is the check that matters most: it runs the same schema
-        // validation a real device runs on update, and it is what would throw if the recreated
-        // table's DDL differed from what Room expects by so much as a nullability.
+        // Reopening through Room runs every remaining migration up to the current version and
+        // applies the same schema validation a real device does on update - which is what would
+        // throw if the recreated table's DDL differed from Room's expectation by so much as a
+        // nullability.
         val db = Room.databaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             AppDatabase::class.java,
@@ -195,6 +200,69 @@ class AppDatabaseMigrationTest {
 
             db.intentionDao().update(unanswered.copy(kind = IntentionKind.HABIT, respondedAtMillis = 8000))
             assertEquals(IntentionKind.HABIT, db.intentionDao().get(id)!!.kind)
+        }
+        db.close()
+    }
+
+    /**
+     * The mindful pause (#5) records intention, outcome and choice as one row, so overlay_events
+     * gains three nullable columns.
+     *
+     * The opposite shape to 2 -> 3, and the test says so: this one must lose nothing at all. A
+     * pause the user answered before the update is history, not configuration, and there is no
+     * other copy of it.
+     */
+    @Test
+    fun migrate3To4_addsIntentionColumnsAndKeepsEveryExistingRow() {
+        val dbName = "migration-3-4-test.db"
+
+        helper.createDatabase(dbName, 3).use { db ->
+            db.execSQL(
+                "INSERT INTO overlay_events " +
+                    "(packageName, dateEpochDay, shownAtMillis, scrollCountAtTrigger, sessionTimeMillisAtTrigger, choice, respondedAtMillis) " +
+                    "VALUES ('com.instagram.android', 20000, 5000, 40, 600000, 'CONTINUE', 6000)",
+            )
+            db.execSQL(
+                "INSERT INTO daily_app_stats (packageName, dateEpochDay, scrollCount, foregroundTimeMillis, updatedAtMillis) " +
+                    "VALUES ('com.instagram.android', 20000, 137, 600000, 1000)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 4, true, MIGRATION_3_4).use { db ->
+            assertEquals(
+                "the v3 overlay_events row did not survive - this migration adds nullable columns " +
+                    "and must not touch a single existing row",
+                1,
+                db.countRows("overlay_events"),
+            )
+            assertEquals(1, db.countRows("daily_app_stats"))
+        }
+
+        val db = Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            dbName,
+        ).addMigrations(*ALL_MIGRATIONS).build()
+
+        runBlocking {
+            val events = db.overlayEventDao().observeForDayRange(20000, 20000).first()
+            assertEquals(1, events.size)
+            val migrated = events.first()
+            // The pre-existing values are the point: an ALTER TABLE that quietly rewrote the row
+            // would still leave exactly one row behind.
+            assertEquals(OverlayChoice.CONTINUE, migrated.choice)
+            assertEquals(40, migrated.scrollCountAtTrigger)
+            // Null is correct rather than merely tolerated: a pause shown before this release
+            // genuinely had no intention recorded against it, and #6 must not read that as
+            // "asked and ignored".
+            assertNull("a pre-existing pause cannot have an intention", migrated.intentionId)
+            assertNull(migrated.intentionKind)
+            assertNull(migrated.outcome)
+
+            // And the new columns are writable, not merely present.
+            db.overlayEventDao().update(migrated.copy(outcome = PauseOutcome.NOT_REALLY))
+            val reread = db.overlayEventDao().get(migrated.id)!!
+            assertEquals(PauseOutcome.NOT_REALLY, reread.outcome)
         }
         db.close()
     }
