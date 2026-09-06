@@ -99,6 +99,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Applies to the androidTest apk only. AGP runs R8 over it as well whenever the
+            // tested variant is minified, and its test-only dependencies need rules the shipped
+            // app must not inherit - see the file's own header.
+            testProguardFiles("proguard-rules-androidtest.pro")
         }
         debug {
             isMinifyEnabled = false

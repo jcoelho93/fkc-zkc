@@ -58,13 +58,27 @@ if [ -n "${MARKER_LINE:-}" ]; then
     echo "=== Complete unfiltered logcat from the settings write (line $MARKER_LINE) through +2000 lines ==="
     tail -n "+${MARKER_LINE}" "$LOGCAT_FILE" | head -n 2000
 else
-    echo "=== Could not find the settings-write marker line - dumping last 2000 lines of logcat instead ==="
-    tail -n 2000 "$LOGCAT_FILE"
+    # No marker means the suite never got as far as enabling the service - almost always a build
+    # failure (gradle's own error is printed above, and is the thing worth reading). Dumping the
+    # usual 2000 lines here buries that error under unrelated system-app chatter from the
+    # emulator's boot, so this case gets a much smaller window.
+    echo "=== The suite never reached the settings write, so gradle most likely failed before"
+    echo "=== instrumentation started - read the gradle error above. Last 300 logcat lines follow"
+    echo "=== only in case the app crashed on launch."
+    tail -n 300 "$LOGCAT_FILE"
 fi
 
 # The overlay evidence is deliberately pulled out separately: it is a handful of lines in a
 # 100k-line log, and it is the whole answer to "did the pause screen actually appear?".
 echo "=== Overlay render evidence (OverlayController / OverlayRenderTest) ==="
 grep -E "Overlay (rendered|NOT rendered|render watcher failed)|OverlayRenderTest" "$LOGCAT_FILE" || echo "(no overlay render lines found)"
+
+# Printed last, and in these words, because everything above is thousands of lines of context:
+# on a failure the reader needs the verdict at the bottom of the log, not scrolled off the top.
+if [ "$RESULT" -ne 0 ]; then
+    echo "=== FAILED: ./gradlew ${GRADLE_ARGS[*]} exited $RESULT (variant: $VARIANT) ==="
+else
+    echo "=== PASSED: ./gradlew ${GRADLE_ARGS[*]} (variant: $VARIANT) ==="
+fi
 
 exit "$RESULT"
