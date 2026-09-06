@@ -82,6 +82,22 @@ jobs:
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -r | head -1)
           "$APKSIGNER" verify --print-certs "$APK"
 
+      # The signed artifact people actually install. Published alongside the APK rather than left
+      # in the job log on purpose: a passing check nobody outside the repo can see proves nothing
+      # to the stranger being asked to grant an accessibility service.
+      - name: Verify the signed APK's safety claims
+        run: |
+          chmod +x .github/scripts/verify_release_apk.sh
+          ./.github/scripts/verify_release_apk.sh \
+            app/build/outputs/apk/release/app-release.apk \
+            verification-report.txt
+          {
+            echo '## Release APK verification'
+            echo '```'
+            cat verification-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -98,7 +114,14 @@ jobs:
             fresh install: Android will ask you to allow installs from your browser, and on Android
             13+ you may need App info -> ⋮ -> "Allow restricted settings" before the accessibility
             service can be turned on.
-          files: app/build/outputs/apk/release/app-release.apk
+
+            **`verification-report.txt`** attached below is generated from this exact APK. It lists
+            every permission it holds, shows that `INTERNET` is absent, that the accessibility
+            service cannot read screen content, and that no networking code survives in the
+            compiled app. You do not have to take the README's word for any of it.
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            verification-report.txt
           fail_on_unmatched_files: true
 
       - name: Remove decoded keystore

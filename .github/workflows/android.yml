@@ -34,6 +34,32 @@ jobs:
       - name: Unit tests
         run: ./gradlew test
 
+      # Runs against the built release APK, not the source: the claims the README makes are about
+      # what lands on someone's phone, and only the artifact can answer that. Gating here means a
+      # dependency bump that quietly adds a permission fails the PR that introduced it, rather
+      # than being found later by a user reading `dumpsys package`.
+      - name: Verify the release APK's safety claims
+        run: |
+          chmod +x .github/scripts/verify_release_apk.sh
+          ./.github/scripts/verify_release_apk.sh \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            verification-report.txt
+          {
+            echo '## Release APK verification'
+            echo '```'
+            cat verification-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-report
+          path: verification-report.txt
+          retention-days: 7
+          if-no-files-found: warn
+
       # R8's own account of what it kept, renamed and removed from the release build.
       # usage.txt is the direct answer to "did minification strip this class?", which is the
       # question every silent release-only failure on this project has eventually come down to;
