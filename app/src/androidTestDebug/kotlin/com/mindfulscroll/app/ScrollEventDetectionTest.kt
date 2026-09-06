@@ -4,6 +4,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,12 +26,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * (checked on its own independent schedule) and scroll count as best-effort only - see the
  * README's detection notes and ScrollMonitorService's class doc.
  *
- * This test now only logs the counts rather than asserting on them: they're a known,
- * accepted platform characteristic, not a bug to keep failing the build over. It stays in
- * the suite (and keeps running on every CI push) so a change in either direction - a future
- * Compose/AGP version starting to fire one of these, or the harness itself breaking (activity
- * fails to launch, gesture fails to perform) - shows up in the log/test report instead of
- * silently going unnoticed.
+ * The event counts are logged, not asserted: they're a known, accepted platform
+ * characteristic, not a bug to keep failing the build over, and a future Compose/AGP version
+ * starting to fire one of them would be news rather than a regression.
+ *
+ * The HARNESS is asserted, and that separation is the whole point. "Zero events" and "the
+ * gesture never happened" produce an identical log line, so without the assertions below this
+ * test would keep reporting the platform's behaviour long after it had stopped measuring it -
+ * a broken activity launch, a renamed test tag or a swipe that no longer moves the list would
+ * all read as a clean confirmation of the finding. So: the list must exist, and it must
+ * actually have scrolled, before the counts mean anything at all.
  *
  * Uses UiAutomation.setOnAccessibilityEventListener directly rather than a real
  * AccessibilityService, since UiAutomation (which backs Espresso/UiAutomator) is already
@@ -66,14 +71,23 @@ class ScrollEventDetectionTest {
                 }
             }
 
-            // Exercising the harness itself (activity launch, tag lookup, gesture injection) is
-            // the part that should fail loudly if something regresses - JUnit fails the test on
-            // any uncaught exception here, no explicit assertion needed for that.
+            // The list is there before anything is claimed about scrolling it. An activity that
+            // failed to launch, or a test tag that no longer matches, would otherwise surface as
+            // "zero scroll events" - the exact answer this test expects, for entirely the wrong
+            // reason.
+            composeRule.onNodeWithTag(ScrollProbeActivity.SCROLL_PROBE_LIST_TAG).assertExists()
+            composeRule.onNodeWithText(FIRST_ITEM).assertExists()
+
             composeRule.onNodeWithTag(ScrollProbeActivity.SCROLL_PROBE_LIST_TAG).performTouchInput {
                 repeat(15) { swipeUp() }
             }
             composeRule.waitForIdle()
             Thread.sleep(1_500) // accessibility events are dispatched async; give them time to land
+
+            // The measurement actually happened: a LazyColumn drops off-screen items from
+            // composition, so item #0 being gone is proof the injected swipes moved the list and
+            // not merely that they were dispatched without throwing.
+            composeRule.onNodeWithText(FIRST_ITEM).assertDoesNotExist()
         } finally {
             uiAutomation.setOnAccessibilityEventListener(null)
         }
@@ -86,5 +100,13 @@ class ScrollEventDetectionTest {
                 "TYPE_WINDOW_CONTENT_CHANGED=$contentChanged " +
                 "(both zero was expected as of this test's last update - see the class doc)",
         )
+    }
+
+    private companion object {
+        /**
+         * The first row of ScrollProbeActivity's list. Used as the scroll witness: present before
+         * the swipes, gone after them.
+         */
+        const val FIRST_ITEM = "Probe item #0"
     }
 }

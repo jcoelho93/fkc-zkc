@@ -139,6 +139,12 @@ Logcat under tag `MindfulScroll`. If the interruption never fires:
 - raw counters stay at **zero** while you scroll → the OS delivers neither signal for that app;
 - raw counters climb but nothing is counted → the foreground-matching logic is at fault.
 
+**Scheduled threshold checks fired** is the third counter to read here, and for most feed apps it
+is the only one that matters. Compose feeds deliver no scroll events at all, so the time half of
+the threshold has to be evaluated on its own timer rather than whenever an event happens to
+arrive. If this stays at zero while an app sits in the foreground past its limit, that timer is
+not running — and no amount of scrolling will ever trigger the pause.
+
 Overlays are reported as two numbers — **windows added** and **windows actually drawn**.
 "Added" only means `addView()` returned; the window can still be accepted and then never laid
 out, sized 0×0 or never composed, while every other counter reads like success. "Drawn" means a
