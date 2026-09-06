@@ -6,7 +6,7 @@ Everything is on-device: no network permission, no analytics, no telemetry, ever
 
 ## How we work
 
-José gives a prompt; Claude implements it **on a branch** and opens a **PR**. Never commit
+The developer gives a prompt; Claude implements it **on a branch** and opens a **PR**. Never commit
 directly to `main`.
 
 1. Branch off `main` with a short descriptive name.
@@ -15,6 +15,35 @@ directly to `main`.
 4. **Watch the GitHub Actions runs until they finish**, and confirm the PR actually merged.
    A PR left open, or auto-merge that silently did nothing, is an unfinished task.
 5. If CI fails, fix it on the same branch and keep watching. Do not hand back a red PR.
+
+### Watch for review comments too
+
+While watching a PR, poll for new comments from the developer and act on them — a comment left
+while CI runs must not be merged straight past. Both kinds matter: conversation comments and
+inline review comments on specific lines.
+
+```sh
+SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # capture before the wait loop starts
+# conversation tab
+gh pr view "$PR" --json comments \
+  --jq ".comments[] | select(.createdAt > \"$SINCE\") | \"\(.author.login): \(.body)\""
+# inline review comments, which the above does NOT include
+gh api "repos/{owner}/{repo}/pulls/$PR/comments" \
+  --jq ".[] | select(.created_at > \"$SINCE\") | \"\(.user.login) @ \(.path):\(.line): \(.body)\""
+```
+
+Fold both into the same loop that waits on CI, so one poll covers checks, comments and merge
+state. When something arrives:
+
+- **A concrete change request** → make it on the same branch and push. CI re-runs and
+  auto-merge picks it up; say what was changed and where.
+- **A question** → answer it, in the PR thread if it is about the code under review.
+- **Something that changes the goal of the task** → stop. Disable auto-merge
+  (`gh pr merge "$PR" --disable-auto`) so a half-right change cannot merge itself while the
+  question is open, then ask.
+
+If a comment arrives after the PR has already merged, follow up in a new branch and PR rather
+than pushing to `main`.
 
 ### Ask first, or just ship?
 
@@ -65,7 +94,8 @@ every other project on this machine). Export per-command. `local.properties` hol
 That is what makes `--auto` meaningful: without required checks, GitHub auto-merge has nothing
 to wait for and merges immediately. `strict: true` is set, so a branch must also be up to date
 with `main` — if `main` moves while CI runs, rebase or merge `main` in and let it re-run.
-Admins are not enforced against, so José can still push directly to `main` when needed.
+Admins are not enforced against, so the developer can still push
+directly to `main` when needed.
 
 Three checks, all required to be green before merge:
 
