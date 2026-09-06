@@ -102,6 +102,27 @@ class AccessibilityServiceHarness {
         shell("settings put secure enabled_accessibility_services ''")
     }
 
+    /**
+     * Brings MainActivity to the foreground so the service sees a TYPE_WINDOW_STATE_CHANGED event.
+     *
+     * Deliberately `am start` rather than ActivityScenario. ActivityScenario pulls androidx.test's
+     * whole runtime across the same app/test-apk seam that has already cost this suite two rounds
+     * of NoClassDefFoundError on the release variant (androidx.tracing.Trace, then kotlin.LazyKt):
+     * anything it needs has to survive the APP's R8 pass, and the app has no reason to keep it.
+     * A shell launch depends on nothing but the activity being exported, and it is also closer to
+     * how the activity really starts on a device.
+     *
+     * The class name is fully qualified and the package comes from targetContext, because the
+     * debug variant carries an applicationIdSuffix while the class name does not move.
+     */
+    fun launchMainActivity(): String =
+        shell("am start -W -n ${targetContext.packageName}/com.mindfulscroll.app.MainActivity")
+
+    /** Sends the activity to the background again, so one test does not leave state for the next. */
+    fun pressHome() {
+        shell("input keyevent KEYCODE_HOME")
+    }
+
     /** Runs a shell command and blocks until its output stream is drained, i.e. it completed. */
     fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(uiAutomation.executeShellCommand(command))

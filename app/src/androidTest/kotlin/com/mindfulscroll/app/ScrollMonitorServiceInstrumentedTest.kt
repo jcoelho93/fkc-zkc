@@ -1,7 +1,6 @@
 package com.mindfulscroll.app
 
 import android.util.Log
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -111,14 +110,15 @@ class ScrollMonitorServiceInstrumentedTest {
         )
 
         Log.i(TAG, "Service connected, launching an activity to trigger a window-state-change event")
-        // MainActivity rather than the debug-only ScrollProbeActivity, so this test runs
-        // unchanged against the release variant too.
-        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        // MainActivity rather than the debug-only ScrollProbeActivity, so this test runs unchanged
+        // against the release variant - and launched through `am start` rather than
+        // ActivityScenario, for the R8 reason documented on AccessibilityServiceHarness.
+        Log.i(TAG, "am start said: " + harness.launchMainActivity())
 
         val gotForegroundEvent = harness.pollUntil(15_000, "foreground-event") {
             harness.diagnostics.state.value.currentForegroundPackage != null
         }
-        scenario.close()
+        harness.pressHome()
 
         val finalState = diagnostics.state.value
         Log.i(

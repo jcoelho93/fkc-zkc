@@ -14,3 +14,24 @@
 # verify: the accessibility service, its config resource, the Hilt graph, Room, and the whole
 # Compose overlay render path are all still fully minified exactly as they ship.
 -keep class androidx.tracing.** { *; }
+
+# The Kotlin standard library, kept whole. This is the same seam as androidx.tracing above, but
+# it cannot be closed one class at a time: the failure was
+# NoClassDefFoundError: Lkotlin/LazyKt; from androidx.test.platform.io.TestDirCalculator, and the
+# test apk's own sources are Kotlin too, so between them they reach CollectionsKt, StringsKt,
+# ResultKt, Intrinsics and most of the rest. The stdlib lives in the app apk (the test apk does
+# not carry a second copy), so whatever the app's R8 pass drops, the test apk cannot resolve.
+#
+# Known limitation, stated plainly: this means the shipped apk shrinks the stdlib and the
+# instrumented one does not, so the two are not byte-identical. It does not weaken what this run
+# is here to establish - the resolved accessibility event mask depends on the manifest and the
+# config resource, and the overlay path depends on our own code, Hilt, and Compose, all of which
+# stay fully minified. It would hide an R8-stripped stdlib function that the app itself needed,
+# which is a real gap; catching that is the job of the release build actually running, not of the
+# instrumentation.
+-keep class kotlin.** { *; }
+
+# Same reasoning, far smaller: the tests read diagnostics state through StateFlow. The app leans
+# on coroutines everywhere so most of this survives minification anyway, but the ones the tests
+# touch and the app does not would fail exactly like LazyKt did.
+-keep class kotlinx.coroutines.** { *; }
