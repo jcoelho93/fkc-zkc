@@ -1,7 +1,15 @@
 name: Instrumented tests
 
 # Runs on an actual Android emulator - this is what lets us empirically verify
-# device-only behavior (accessibility event delivery, in this case) instead of guessing.
+# device-only behavior (accessibility event delivery, overlay window rendering) instead of
+# guessing.
+#
+# Both the debug and the release variant are instrumented. The release run is the point of the
+# matrix: R8 minification is the standing suspect for exactly the kind of silent breakage this
+# project keeps hitting (manifest-referenced classes, reflectively-reached ones, resources
+# reached only through <meta-data>), and neither the resolved accessibility event mask nor the
+# overlay window is something a static inspection of the APK can answer - they are runtime facts
+# about the shipped artifact.
 
 on:
   push:
@@ -12,7 +20,14 @@ on:
 jobs:
   instrumented-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    strategy:
+      # Never cancel the release job because debug failed (or vice versa): "debug passes, release
+      # doesn't" IS the finding this matrix exists to produce, and it is only visible if both run.
+      fail-fast: false
+      matrix:
+        variant: [debug, release]
+    name: instrumented-tests (${{ matrix.variant }})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,14 +50,17 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # Diagnostic: print the actual merged manifest for the debug variant, so a merge
+      # Diagnostic: print the actual merged manifest for the variant under test, so a merge
       # conflict or missing/altered <service>/<meta-data> entry is directly visible instead
       # of inferred from behavior. Cheap (no emulator needed) so it runs even on failure.
-      - name: Dump merged debug manifest
+      - name: Dump merged manifest
         run: |
-          ./gradlew :app:processDebugManifest
-          echo "=== Merged AndroidManifest.xml (debug) ==="
-          find app/build -iname "AndroidManifest.xml" -path "*ebug*" -print -exec cat {} \;
+          set -uo pipefail
+          VARIANT='${{ matrix.variant }}'
+          CAPITALIZED="$(echo "${VARIANT:0:1}" | tr '[:lower:]' '[:upper:]')${VARIANT:1}"
+          ./gradlew ":app:process${CAPITALIZED}Manifest"
+          echo "=== Merged AndroidManifest.xml ($VARIANT) ==="
+          find app/build -iname "AndroidManifest.xml" -path "*${VARIANT}*" -print -exec cat {} \;
 
       - name: Run instrumented tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -52,13 +70,13 @@ jobs:
           arch: x86_64
           profile: pixel_5
           disable-animations: true
-          script: bash .github/scripts/run_instrumented_tests.sh
+          script: bash .github/scripts/run_instrumented_tests.sh ${{ matrix.variant }}
 
       - name: Upload instrumented test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: instrumented-test-reports
+          name: instrumented-test-reports-${{ matrix.variant }}
           path: app/build/reports/androidTests
           retention-days: 7
 
@@ -68,7 +86,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: full-logcat
-          path: /tmp/full-logcat.txt
+          name: full-logcat-${{ matrix.variant }}
+          path: /tmp/full-logcat-${{ matrix.variant }}.txt
           retention-days: 7
           if-no-files-found: ignore

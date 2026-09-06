@@ -33,6 +33,27 @@ val appVersionCode: Int = appVersionName.substringBefore('-')
  */
 val releaseKeystorePath: String? = System.getenv("SIGNING_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
 
+/**
+ * Which build type `connectedAndroidTest` installs and instruments. Defaults to debug; CI also
+ * runs the whole instrumented suite with `-Pmindfulscroll.testBuildType=release` because R8 is
+ * exactly the kind of thing that breaks manifest-referenced and reflectively-reached classes
+ * without a single error - twice already the failures on this project have been silent ones, and
+ * the resolved accessibility event mask and the overlay window are runtime facts that no static
+ * check of the APK can answer.
+ */
+val testBuildTypeName: String =
+    providers.gradleProperty("mindfulscroll.testBuildType").getOrElse("debug")
+
+/**
+ * Lets a release build be signed with the debug key so it can be installed on an emulator and
+ * instrumented. Deliberately an explicit opt-in property rather than an automatic fallback: the
+ * publish workflow relies on a missing keystore producing an UNSIGNED apk (which its
+ * "Verify the APK is signed" step then catches), and a silent fall back to the debug key would
+ * turn that loud failure into an apk that installs fine and can never be updated in place.
+ */
+val signReleaseWithDebugKey: Boolean =
+    providers.gradleProperty("mindfulscroll.signReleaseWithDebugKey").orNull.toBoolean()
+
 android {
     namespace = "com.mindfulscroll.app"
     compileSdk = 35
@@ -46,6 +67,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    testBuildType = testBuildTypeName
 
     signingConfigs {
         create("release") {
@@ -65,7 +88,12 @@ android {
             // Only wired up when the workflow supplied a keystore. Without this guard a local
             // `assembleRelease` would fail on a signing config with a null storeFile instead of
             // just producing an unsigned APK.
-            signingConfig = if (releaseKeystorePath != null) signingConfigs.getByName("release") else null
+            signingConfig = when {
+                releaseKeystorePath != null -> signingConfigs.getByName("release")
+                // Instrumentation only - see signReleaseWithDebugKey above.
+                signReleaseWithDebugKey -> signingConfigs.getByName("debug")
+                else -> null
+            }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -114,7 +142,14 @@ android {
             kotlin.srcDirs("src/test/kotlin")
         }
         getByName("androidTest") {
+            // Everything here must compile and run against BOTH variants, so it may not touch
+            // anything from src/debug. Debug-only instrumented tests go in androidTestDebug.
             kotlin.srcDirs("src/androidTest/kotlin")
+        }
+        getByName("androidTestDebug") {
+            // Tests that depend on debug-only components (ScrollProbeActivity) and so cannot run
+            // against the release variant.
+            kotlin.srcDirs("src/androidTestDebug/kotlin")
         }
     }
 }
@@ -170,5 +205,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    // Used only by the androidTestDebug suite (createAndroidComposeRule also needs
+    // ui-test-manifest, which is debug-only), but declared for both: it is inert in the release
+    // androidTest APK, and scoping it to androidTestDebugImplementation would mean depending on a
+    // configuration AGP has no reason to create when testBuildType is release.
     androidTestImplementation(libs.androidx.ui.test.junit4)
 }

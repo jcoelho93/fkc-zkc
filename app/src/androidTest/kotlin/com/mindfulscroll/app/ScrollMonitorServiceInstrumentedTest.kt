@@ -1,20 +1,11 @@
 package com.mindfulscroll.app
 
-import android.accessibilityservice.AccessibilityServiceInfo
-import android.app.UiAutomation
-import android.content.Context
-import android.os.ParcelFileDescriptor
 import android.util.Log
-import android.view.accessibility.AccessibilityManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import com.mindfulscroll.app.accessibility.DiagnosticsEntryPoint
-import com.mindfulscroll.app.accessibility.ServiceDiagnostics
-import dagger.hilt.android.EntryPointAccessors
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,8 +17,8 @@ import org.junit.runner.RunWith
  * accessibility_service_config.xml, its Hilt injection). This test closes that gap: it
  * enables the real service exactly the way a real user does (writing to
  * Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, scripted instead of tapped) and checks,
- * via ServiceDiagnostics (readable in-process through a debug-only Hilt entry point), whether
- * it connects and receives so much as a single TYPE_WINDOW_STATE_CHANGED event - about as
+ * via ServiceDiagnostics (readable in-process through a Hilt entry point), whether it
+ * connects and receives so much as a single TYPE_WINDOW_STATE_CHANGED event - about as
  * basic and unconditional an accessibility event as exists, so if this doesn't fire the
  * problem is in event delivery/registration, not anything scroll-specific.
  *
@@ -37,74 +28,45 @@ import org.junit.runner.RunWith
  * UiAutomation suppresses every other accessibility service on the device unless it is created
  * with FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES, and AMS implements that suppression by
  * quietly not binding those services. Silent by design, which is why widening the logcat grep
- * kept turning up nothing. See setUp() for the flag; that silence is also why this test now
- * dumps `dumpsys accessibility` when the connection step fails.
+ * kept turning up nothing. See AccessibilityServiceHarness for the flag; that silence is also
+ * why this test dumps `dumpsys accessibility` when the connection step fails.
  *
  * Note this was never the bug from the original report - there the service *did* connect
  * ("Connected: Yes" as a settled state) and simply received no events. Suppression only ever
  * blocked this test from reaching the question it exists to ask.
+ *
+ * This class lives in `androidTest` (not `androidTestDebug`) and deliberately touches nothing
+ * debug-only, so `connectedReleaseAndroidTest` runs it against the R8-minified build. That is
+ * the only way to answer "does the service still resolve its event mask after minification?",
+ * since the resolved mask is a runtime value the system computes from the shipped APK.
  */
 @RunWith(AndroidJUnit4::class)
 class ScrollMonitorServiceInstrumentedTest {
 
-    private lateinit var diagnostics: ServiceDiagnostics
-    private lateinit var componentName: String
-    private lateinit var uiAutomation: UiAutomation
-    private lateinit var targetContext: Context
+    private lateinit var harness: AccessibilityServiceHarness
 
     @Before
     fun setUp() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        targetContext = context
-        diagnostics = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            DiagnosticsEntryPoint::class.java,
-        ).serviceDiagnostics()
-        componentName = "${context.packageName}/com.mindfulscroll.app.accessibility.ScrollMonitorService"
-        // FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES is load-bearing, not a tweak: by default a
-        // connected UiAutomation suppresses every other accessibility service on the device, and
-        // AccessibilityManagerService enforces that by silently declining to bind them (see
-        // UiAutomationManager.suppressingAccessibilityServicesLocked - there is no log, no error,
-        // the service simply never connects). Every instrumented test holds a UiAutomation, and
-        // this test needs one anyway to run `settings put`, so without this flag the test's own
-        // harness is what prevents the service it is trying to enable from ever starting.
-        uiAutomation = InstrumentationRegistry.getInstrumentation()
-            .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        harness = AccessibilityServiceHarness()
     }
 
     @After
     fun tearDown() {
-        runShellCommand("settings put secure enabled_accessibility_services ''")
+        harness.disableService()
     }
 
     @Test
     fun realServiceConnectsAndReceivesWindowStateChangedEvents() {
-        // Service list first, master switch last - the write to accessibility_enabled is
-        // what should trigger AccessibilityManagerService to (re)read the service list, so
-        // the list needs to already be correct when that happens.
-        runShellCommand("settings put secure enabled_accessibility_services $componentName")
-        runShellCommand("settings put secure accessibility_enabled 1")
+        val diagnostics = harness.diagnostics
 
-        val readBackServices = runShellCommandForOutput("settings get secure enabled_accessibility_services")
-        val readBackEnabled = runShellCommandForOutput("settings get secure accessibility_enabled")
-        Log.i(
-            "ScrollMonitorServiceTest",
-            "After writing settings - enabled_accessibility_services=\"$readBackServices\" accessibility_enabled=\"$readBackEnabled\" (expected component: $componentName)",
-        )
-
-        val connected = pollUntilWithProgress(timeoutMillis = 30_000, logTag = "connect") {
-            diagnostics.state.value.isServiceConnected
-        }
-        if (!connected) {
+        if (!harness.enableServiceAndAwaitConnection()) {
             // `dumpsys accessibility` lists the bound services and any UiAutomation service that
             // is suppressing them - i.e. it distinguishes "never registered", "registered but not
             // bound" and "suppressed" directly, instead of leaving them to be inferred.
-            Log.i("ScrollMonitorServiceTest", "dumpsys accessibility:\n" + runShellCommandForOutput("dumpsys accessibility"))
-            fail(
+            Log.i(TAG, "dumpsys accessibility:\n" + harness.dumpsysAccessibility())
+            throw AssertionError(
                 "ScrollMonitorService never connected within 30s after enabling " +
-                    "$componentName. Settings read back as: " +
-                    "enabled_accessibility_services=\"$readBackServices\", " +
-                    "accessibility_enabled=\"$readBackEnabled\". If those values look correct, " +
+                    "${harness.componentName}. If the settings logged above read back correctly, " +
                     "this points to a genuine binding/registration problem (check the manifest " +
                     "<service> declaration and accessibility_service_config.xml); if they don't " +
                     "match what was written, the settings writes themselves aren't taking effect.",
@@ -126,17 +88,41 @@ class ScrollMonitorServiceInstrumentedTest {
             resolvedEventTypes != 0,
         )
 
-        Log.i("ScrollMonitorServiceTest", "Service connected, launching an activity to trigger a window-state-change event")
-        val scenario = ActivityScenario.launch(ScrollProbeActivity::class.java)
+        // Asserted exactly, not merely "non-zero". A partially-resolved mask is its own silent
+        // failure: losing typeWindowStateChanged alone would leave scroll counting apparently
+        // healthy while foreground tracking stops - and foreground time is the trustworthy half
+        // of the threshold for every Compose-feed app. The expected value is built from the
+        // platform constants rather than hard-coded to 0x1820 so a failure can name the missing
+        // event type instead of just printing two hex numbers.
+        assertEquals(
+            "The system resolved event-type mask 0x${resolvedEventTypes.toString(16)} for " +
+                "ScrollMonitorService, but accessibility_service_config.xml asks for 0x" +
+                "${AccessibilityMasks.EXPECTED_EVENT_TYPES.toString(16)}. Missing: " +
+                AccessibilityMasks.describe(
+                    AccessibilityMasks.EXPECTED_EVENT_TYPES and resolvedEventTypes.inv(),
+                ) +
+                "; unexpected extras: " +
+                AccessibilityMasks.describe(
+                    resolvedEventTypes and AccessibilityMasks.EXPECTED_EVENT_TYPES.inv(),
+                ) +
+                ". Resolved info: ${diagnostics.state.value.resolvedServiceInfo}",
+            AccessibilityMasks.EXPECTED_EVENT_TYPES,
+            resolvedEventTypes,
+        )
 
-        val gotForegroundEvent = pollUntilWithProgress(timeoutMillis = 15_000, logTag = "foreground-event") {
-            diagnostics.state.value.currentForegroundPackage != null
+        Log.i(TAG, "Service connected, launching an activity to trigger a window-state-change event")
+        // MainActivity rather than the debug-only ScrollProbeActivity, so this test runs
+        // unchanged against the release variant too.
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+
+        val gotForegroundEvent = harness.pollUntil(15_000, "foreground-event") {
+            harness.diagnostics.state.value.currentForegroundPackage != null
         }
         scenario.close()
 
         val finalState = diagnostics.state.value
         Log.i(
-            "ScrollMonitorServiceTest",
+            TAG,
             "currentForegroundPackage=${finalState.currentForegroundPackage} " +
                 "totalEventCount=${finalState.totalEventCount} " +
                 "resolvedServiceInfo=${finalState.resolvedServiceInfo} recentLog=${finalState.recentLog}",
@@ -151,8 +137,8 @@ class ScrollMonitorServiceInstrumentedTest {
             //     against, which is what the XML *became*, not what it says.
             //   - dumpsys accessibility shows AMS's whole picture: bound services, and any
             //     UiAutomation service sitting alongside ours.
-            Log.i("ScrollMonitorServiceTest", "enabled services per AccessibilityManager: " + describeEnabledServices())
-            Log.i("ScrollMonitorServiceTest", "dumpsys accessibility:\n" + runShellCommandForOutput("dumpsys accessibility"))
+            Log.i(TAG, "enabled services per AccessibilityManager: " + harness.describeEnabledServices())
+            Log.i(TAG, "dumpsys accessibility:\n" + harness.dumpsysAccessibility())
         }
 
         assertTrue(
@@ -167,53 +153,7 @@ class ScrollMonitorServiceInstrumentedTest {
         )
     }
 
-    private fun pollUntilWithProgress(
-        timeoutMillis: Long,
-        logTag: String,
-        intervalMillis: Long = 500,
-        condition: () -> Boolean,
-    ): Boolean {
-        val start = System.currentTimeMillis()
-        val deadline = start + timeoutMillis
-        var lastLoggedSecond = -1L
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) {
-                Log.i("ScrollMonitorServiceTest", "[$logTag] condition met after ${System.currentTimeMillis() - start}ms")
-                return true
-            }
-            val elapsedSeconds = (System.currentTimeMillis() - start) / 1000
-            if (elapsedSeconds != lastLoggedSecond && elapsedSeconds % 2 == 0L) {
-                lastLoggedSecond = elapsedSeconds
-                Log.i(
-                    "ScrollMonitorServiceTest",
-                    "[$logTag] still waiting at ${elapsedSeconds}s - state=${diagnostics.state.value}",
-                )
-            }
-            Thread.sleep(intervalMillis)
-        }
-        return condition()
+    private companion object {
+        const val TAG = "ScrollMonitorServiceTest"
     }
-
-    /** The system's own parsed view of every enabled service - the event mask AMS dispatches against. */
-    private fun describeEnabledServices(): String {
-        val manager = targetContext.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val services = manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        if (services.isEmpty()) return "<none>"
-        return services.joinToString(separator = "\n") { info ->
-            "  ${info.id}: eventTypes=0x${info.eventTypes.toString(16)} " +
-                "feedbackType=0x${info.feedbackType.toString(16)} flags=0x${info.flags.toString(16)} " +
-                "packageNames=${info.packageNames?.toList()}"
-        }
-    }
-
-    /** Blocks until the shell command's output stream is fully drained, so it has actually completed. */
-    private fun runShellCommand(command: String) {
-        runShellCommandForOutput(command)
-    }
-
-    private fun runShellCommandForOutput(command: String): String =
-        ParcelFileDescriptor.AutoCloseInputStream(uiAutomation.executeShellCommand(command))
-            .use { it.readBytes() }
-            .toString(Charsets.UTF_8)
-            .trim()
 }

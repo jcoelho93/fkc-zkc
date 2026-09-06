@@ -112,7 +112,9 @@ fun DiagnosticsScreen(
                     LabelValueRow("Raw TYPE_VIEW_SCROLLED (any app)", state.rawScrollEventCount.toString())
                     LabelValueRow("Raw TYPE_WINDOW_CONTENT_CHANGED (any app)", state.rawContentChangedEventCount.toString())
                     LabelValueRow("Scroll ticks counted", state.countedScrollTicks.toString())
-                    LabelValueRow("Overlays shown", state.overlaysShownCount.toString())
+                    LabelValueRow("Overlay windows added", state.overlaysShownCount.toString())
+                    LabelValueRow("Overlay windows actually drawn", state.overlaysRenderedCount.toString())
+                    LabelValueRow("Last overlay render", state.lastOverlayRender ?: "(no overlay attempted yet)")
                     LabelValueRow("Last overlay error", state.lastOverlayError ?: "(none)")
                     Text(
                         "If both raw counters stay at 0 while you scroll a monitored app, the " +
@@ -120,6 +122,15 @@ fun DiagnosticsScreen(
                             "check the accessibility service is really enabled above. If the raw " +
                             "counters climb but \"scroll ticks counted\" doesn't, the events aren't " +
                             "matching the foreground/monitored package - check that above too.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Text(
+                        "\"Added\" and \"actually drawn\" are separate on purpose. Added only means " +
+                            "WindowManager accepted the overlay; drawn means it put real pixels on " +
+                            "screen. If added climbs while drawn stays behind, the pause screen is " +
+                            "being created and never shown - \"last overlay render\" above says what " +
+                            "the window did instead.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
