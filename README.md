@@ -58,8 +58,8 @@ schedule wearing a helpful face.
 
 ## Privacy & permissions
 
-- **No network permission of any kind** — `android.permission.INTERNET` is deliberately never
-  declared, so the app is architecturally incapable of phoning home.
+- **No internet permission.** `android.permission.INTERNET` is never declared, so Android itself
+  makes network access impossible — the app cannot phone home even if its code tried to.
 - Everything lives in a local Room (SQLite) database on your device.
 - Cloud backup and device transfer are disabled for the app's data
   (`android:allowBackup="false"`).
@@ -72,11 +72,43 @@ Two permissions are required, both explained in plain language during onboarding
 | **Accessibility service** (`BIND_ACCESSIBILITY_SERVICE`) | Notice scroll and window events in the apps you chose, and draw the prompt and pause screen. | Does **not** read screen content (`canRetrieveWindowContent` is `false`). Reacts only to scroll and window-change events. |
 | **Usage access** (`PACKAGE_USAGE_STATS`) | Read how long monitored apps were in the foreground, for your own stats. | A "special access" permission: Android only lets an app link you to the system settings screen. Never auto-granted. |
 
-The only other declared permission is `RECEIVE_BOOT_COMPLETED`, which re-schedules the daily
-maintenance job after a reboot.
+### Every permission in the shipped APK
+
+Not just the two we ask you for — the complete list, including what libraries add, because that
+is what you will see if you check with `adb shell dumpsys package com.mindfulscroll.app`.
+
+| Permission | Source | What it allows |
+|---|---|---|
+| `PACKAGE_USAGE_STATS` | ours | Foreground time for your own stats |
+| `RECEIVE_BOOT_COMPLETED` | ours | Re-arm the daily maintenance job after a reboot |
+| `WAKE_LOCK` | WorkManager | Finish a background job before the device sleeps |
+| `ACCESS_NETWORK_STATE` | WorkManager | *Read* connectivity state to schedule jobs. It cannot transmit anything, and without `INTERNET` there is nothing to transmit with |
+| `FOREGROUND_SERVICE` | WorkManager, Lifecycle | Run a job in the foreground |
+| `…DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | AndroidX Core | Self-defined, signature-level; keeps the library's own receivers un-exported |
+
+`ACCESS_NETWORK_STATE` is the one worth explaining rather than hiding: it looks like a network
+permission and is not one. It reads whether you are on wifi; it opens no connections. `INTERNET`
+is the permission that would let anything leave your device, and it is absent.
 
 The prompt and the pause screen are drawn as `TYPE_ACCESSIBILITY_OVERLAY` windows rather than
 `SYSTEM_ALERT_WINDOW`, so **no "draw over other apps" permission is requested** either.
+
+### Don't take our word for it
+
+Every release ships a **`verification-report.txt`**, generated from that exact APK by
+[`verify_release_apk.sh`](.github/scripts/verify_release_apk.sh). It checks the claims above
+against the built binary — after minification, which is what you install — and the same check
+gates every pull request:
+
+- the permission list is **exactly** the table above, so a dependency bump that adds one fails the build;
+- `INTERNET` is absent;
+- the accessibility service declares `canRetrieveWindowContent=false`, `canRequestFilterKeyEvents=false`, and an event mask of exactly `0x1820` (scroll, window-content, window-state — nothing else);
+- no networking code (`Socket`, `HttpURLConnection`, OkHttp, Retrofit, `WebView`) survives in the compiled app;
+- no unexpected native libraries.
+
+These are claims about *the artifact*, not about the source it was built from. Verifying that the
+APK was built from the commit it claims — reproducible builds — is
+[issue #15](../../issues/15) and is not done yet.
 
 ## Installing on your phone (no computer needed)
 
