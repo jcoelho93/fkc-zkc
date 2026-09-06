@@ -17,6 +17,10 @@ set -uo pipefail # deliberately not -e: we want to capture gradle's exit code an
 VARIANT="${1:-debug}"
 LOGCAT_FILE="/tmp/full-logcat-${VARIANT}.txt"
 
+# Generous next to the ~4 minutes a healthy run takes, but far below the job timeout, so a hang
+# fails as a hang instead of as an unexplained cancellation.
+GRADLE_TIMEOUT=20m
+
 case "$VARIANT" in
     debug)
         GRADLE_ARGS=(connectedDebugAndroidTest)
@@ -41,9 +45,18 @@ adb logcat -c
 adb logcat -v time > "$LOGCAT_FILE" &
 LOGCAT_PID=$!
 
-echo "=== Running: ./gradlew ${GRADLE_ARGS[*]} ==="
-./gradlew "${GRADLE_ARGS[@]}"
+# Wrapped in `timeout` because connectedAndroidTest does NOT fail fast when the app process dies
+# on startup: the instrumentation never reports back and gradle waits indefinitely. That once
+# burned the job's entire 45-minute budget to deliver a crash that had happened in the first
+# 30 seconds. A bounded wait turns that into a fast, legible failure with the logcat still
+# attached below.
+echo "=== Running: ./gradlew ${GRADLE_ARGS[*]} (bounded at ${GRADLE_TIMEOUT}) ==="
+timeout --signal=TERM "$GRADLE_TIMEOUT" ./gradlew "${GRADLE_ARGS[@]}"
 RESULT=$?
+if [ "$RESULT" -eq 124 ]; then
+    echo "::error::gradle exceeded ${GRADLE_TIMEOUT} and was killed. The instrumentation almost"
+    echo "::error::certainly never reported back - check the crash section below before anything else."
+fi
 
 sleep 2
 kill "$LOGCAT_PID" 2>/dev/null || true
@@ -67,6 +80,14 @@ else
     echo "=== only in case the app crashed on launch."
     tail -n 300 "$LOGCAT_FILE"
 fi
+
+# Asked first and separately, because "our process died" invalidates every other signal below
+# and is otherwise a handful of lines buried in tens of thousands. A crash inside the app or the
+# test runner - a stripped class, a failed Hilt injection - reads as an inexplicable hang at the
+# gradle level, which is exactly how the release variant failed the first time it ran.
+echo "=== Did the app or test process crash? (FATAL / NoClassDefFoundError / ClassNotFound) ==="
+grep -nE "FATAL EXCEPTION|NoClassDefFoundError|ClassNotFoundException|Process: com\.mindfulscroll" "$LOGCAT_FILE" \
+    | head -n 60 || echo "(no crash signatures found)"
 
 # The overlay evidence is deliberately pulled out separately: it is a handful of lines in a
 # 100k-line log, and it is the whole answer to "did the pause screen actually appear?".

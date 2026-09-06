@@ -103,6 +103,14 @@ android {
             // tested variant is minified, and its test-only dependencies need rules the shipped
             // app must not inherit - see the file's own header.
             testProguardFiles("proguard-rules-androidtest.pro")
+
+            // Only while this variant is the one being instrumented. Conditional rather than
+            // unconditional so the published apk is unchanged by the existence of the test run:
+            // instrumenting the release build is worth doing precisely because the thing tested
+            // is the thing shipped, and every rule here widens that gap. See the file's header.
+            if (testBuildTypeName == "release") {
+                proguardFiles("proguard-rules-instrumentation.pro")
+            }
         }
         debug {
             isMinifyEnabled = false

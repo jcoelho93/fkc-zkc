@@ -20,7 +20,7 @@ on:
 jobs:
   instrumented-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       # Never cancel the release job because debug failed (or vice versa): "debug passes, release
       # doesn't" IS the finding this matrix exists to produce, and it is only visible if both run.

@@ -20,3 +20,18 @@
 # ships. Listed pre-emptively because they travel with the same dependencies and would otherwise
 # each cost a full emulator CI round to discover one at a time.
 -dontwarn javax.annotation.**
+
+# androidx.tracing.Trace is called from AndroidJUnitRunner.onCreate(), i.e. before a single test
+# runs, and R8 dropped it - the app process died on startup with
+# NoClassDefFoundError: Landroidx/tracing/Trace;. It goes missing because the class sits on the
+# seam between the two R8 passes: each one can conclude the other apk will provide it, and then
+# neither does. Kept on both sides (see proguard-rules-instrumentation.pro) rather than guessing
+# which pass dropped it.
+-keep class androidx.tracing.** { *; }
+
+# The test apk's size and performance are irrelevant - it is never shipped - so the test
+# infrastructure is kept wholesale rather than discovered one NoClassDefFoundError at a time.
+# Each such discovery costs a full emulator CI round, and none of them would teach us anything
+# about the app, which is the only thing this run exists to exercise.
+-keep class androidx.test.** { *; }
+-dontwarn androidx.test.**
