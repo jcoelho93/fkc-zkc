@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -298,6 +299,11 @@ class ScrollMonitorService : AccessibilityService() {
         pendingThresholdCheckJob = serviceScope.launch {
             delay(delayMillis)
             if (currentForegroundPackage == packageName && !isOverlayShowing) {
+                // Counted, not just logged: this is the only path that can cross a time threshold
+                // in an app that fires no scroll events, and "it never ran" looks exactly like
+                // "it ran and the threshold wasn't crossed yet" in every other counter.
+                diagnostics.update { it.copy(scheduledThresholdChecksFired = it.scheduledThresholdChecksFired + 1) }
+                diagnostics.log("Scheduled threshold check firing for $packageName")
                 Log.d(TAG, "Scheduled threshold check firing for $packageName")
                 checkThresholdAndMaybeShowOverlay(packageName)
             }
@@ -326,6 +332,28 @@ class ScrollMonitorService : AccessibilityService() {
         }
     }
 
+    /**
+     * Cancels the armed threshold timer - unless the caller *is* that timer.
+     *
+     * The guard is load-bearing, and its absence was a silent failure of the exact shape this
+     * codebase keeps producing. showOverlay() runs inline inside the scheduled check's own
+     * coroutine, so an unguarded cancel here cancels the coroutine that is currently executing.
+     * addView() is not a suspension point, so the overlay still draws and every counter still
+     * reads as success - and then the first suspending line after it silently never runs,
+     * including recordOverlayShown(). The user sees the pause screen; the database has no record
+     * that it was ever shown, and no choice can be filed against it afterwards.
+     *
+     * It only ever affected the time-triggered path (the scroll handler launches its own
+     * coroutine, so it cancels a different job), which is the half that Compose feeds depend on
+     * entirely - and the half nothing exercised until
+     * ThresholdOverlayEndToEndInstrumentedTest.
+     */
+    private suspend fun cancelPendingThresholdCheckUnlessItIsUs() {
+        val runningHere = currentCoroutineContext()[Job]
+        pendingThresholdCheckJob?.takeUnless { it === runningHere }?.cancel()
+        pendingThresholdCheckJob = null
+    }
+
     private suspend fun showOverlay(app: MonitoredAppEntity, scrollCount: Int, sessionElapsedMillis: Long) {
         val now = System.currentTimeMillis()
         // Two of our windows on screen at once would be absurd, and the prompt asks about an
@@ -333,7 +361,7 @@ class ScrollMonitorService : AccessibilityService() {
         intentionPromptController.hide()
         currentIntentionId = null
         isOverlayShowing = true
-        pendingThresholdCheckJob?.cancel()
+        cancelPendingThresholdCheckUnlessItIsUs()
 
         val shown = overlayController.show(
             state = OverlayUiState(

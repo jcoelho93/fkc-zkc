@@ -162,6 +162,26 @@ class AccessibilityServiceHarness {
         shell("input keyevent KEYCODE_HOME")
     }
 
+    /**
+     * Pins the screen on for tests that have to sit and wait out real elapsed time.
+     *
+     * Only ThresholdOverlayEndToEndInstrumentedTest needs this today, and it needs it badly: it
+     * waits a full minute for a time threshold, which is comfortably longer than the emulator's
+     * default screen-off timeout. A blanked screen ends the foreground session under the test, so
+     * the failure would read as "the threshold never fired" - naming a bug in the code under test
+     * for something the harness did.
+     *
+     * Paired with [releaseScreen] in teardown rather than left on, so one test cannot change how
+     * the device behaves for every test after it.
+     */
+    fun keepScreenAwake() {
+        shell("svc power stayon true")
+    }
+
+    fun releaseScreen() {
+        shell("svc power stayon false")
+    }
+
     /** Runs a shell command and blocks until its output stream is drained, i.e. it completed. */
     fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(uiAutomation.executeShellCommand(command))

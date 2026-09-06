@@ -36,6 +36,17 @@ data class ServiceDiagnosticsState(
     val rawContentChangedEventCount: Long = 0,
     /** Scroll ticks actually counted (foreground+monitored+past debounce) - what drives thresholds. */
     val countedScrollTicks: Long = 0,
+    /**
+     * Times the threshold was evaluated by the delayed check that runs on its own schedule,
+     * rather than from inside a scroll handler.
+     *
+     * Counted separately because the two paths are indistinguishable in [overlaysShownCount] and
+     * have opposite failure modes. The time-based half of the threshold is the trustworthy one for
+     * Compose feeds, which fire no scroll events at all - so if this counter stays at 0 while an
+     * app sits in the foreground past its limit, the app has silently regressed to the original
+     * bug: a threshold that can only ever be crossed by an event that never arrives.
+     */
+    val scheduledThresholdChecksFired: Long = 0,
     val activeSessionPackage: String? = null,
     val activeSessionScrollCount: Int = 0,
     val activeSessionStartMillis: Long? = null,
