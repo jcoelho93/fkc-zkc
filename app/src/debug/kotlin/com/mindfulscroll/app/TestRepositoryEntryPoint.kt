@@ -3,6 +3,7 @@ package com.mindfulscroll.app
 import com.mindfulscroll.app.data.AppSettings
 import com.mindfulscroll.app.data.repository.IntentionRepository
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
+import com.mindfulscroll.app.intention.IntentionPromptController
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -21,4 +22,6 @@ interface TestRepositoryEntryPoint {
     fun intentionRepository(): IntentionRepository
 
     fun appSettings(): AppSettings
+
+    fun intentionPromptController(): IntentionPromptController
 }

@@ -3,9 +3,11 @@ package com.mindfulscroll.app
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.UiAutomation
 import android.content.Context
+import android.graphics.Rect
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.mindfulscroll.app.accessibility.DiagnosticsEntryPoint
@@ -64,6 +66,14 @@ class AccessibilityServiceHarness {
      */
     val uiAutomation: UiAutomation = InstrumentationRegistry.getInstrumentation()
         .getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        .also { automation ->
+            // getWindows() returns an empty list unless the querying service asks for interactive
+            // windows, and every window-level assertion here depends on it. Set centrally so a
+            // test that forgets does not silently "find no windows" and conclude the UI is absent.
+            automation.serviceInfo = automation.serviceInfo?.apply {
+                flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            }
+        }
 
     /**
      * Note this resolves against the *target* package, so it is correct for whichever variant
@@ -176,6 +186,83 @@ class AccessibilityServiceHarness {
                 "feedbackType=0x${info.feedbackType.toString(16)} flags=0x${info.flags.toString(16)} " +
                 "packageNames=${info.packageNames?.toList()}"
         }
+    }
+
+    /**
+     * The `mAttrs` line WindowManager holds for our own windows, which is where the layout flags
+     * actually live. Reading them back from the system rather than from our own object is the
+     * point: the flags are what decide whether the app underneath can still receive input.
+     */
+    fun ourWindowAttrs(): String =
+        shell("dumpsys window windows")
+            .lineSequence()
+            .dropWhile { !it.contains(targetContext.packageName) }
+            .take(12)
+            .filter { it.contains("mAttrs=") || it.trimStart().startsWith("fl=") }
+            .joinToString(" ")
+
+    /**
+     * Depth-first walk of every node in a window, so callers can search or describe with the same
+     * traversal. Depth-capped as a cheap guard against a pathological tree.
+     */
+    private fun walkNodes(node: AccessibilityNodeInfo?, depth: Int = 0, visit: (AccessibilityNodeInfo) -> Unit) {
+        if (node == null || depth > 30) return
+        visit(node)
+        for (i in 0 until node.childCount) walkNodes(node.getChild(i), depth + 1, visit)
+    }
+
+    /**
+     * Screen bounds of the first node whose text or content description contains [text], searched
+     * across EVERY window.
+     *
+     * Two things this deliberately does not use:
+     *
+     *  - `uiautomator dump`, which only walks the *active* window. The intention prompt is
+     *    FLAG_NOT_FOCUSABLE by design, so it is never active and a dump simply does not contain
+     *    it - the search comes back empty and looks exactly like "the UI is not there".
+     *  - `findAccessibilityNodeInfosByText`, which returned nothing for Compose nodes here even
+     *    when a manual walk of the same tree found the text immediately.
+     *
+     * Note the asymmetry with screenshots: the accessibility tree CAN see
+     * TYPE_ACCESSIBILITY_OVERLAY windows, while `screencap` composites surfaces and cannot. That
+     * is what makes overlay UI testable by tapping even though it cannot be photographed.
+     */
+    fun findNodeBounds(text: String): Rect? {
+        for (window in uiAutomation.windows) {
+            var found: Rect? = null
+            walkNodes(window.root) { node ->
+                if (found == null) {
+                    val label = "${node.text ?: ""} ${node.contentDescription ?: ""}"
+                    if (label.contains(text, ignoreCase = true)) {
+                        val bounds = Rect().also { node.getBoundsInScreen(it) }
+                        if (!bounds.isEmpty) found = bounds
+                    }
+                }
+            }
+            found?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Every window and the text of every node in it. For failure messages: "could not find the
+     * chip" is useless on its own, because it cannot distinguish a wrong search string from a
+     * window that is not being walked from a UI that never rendered.
+     */
+    fun describeWindowsAndTexts(): String = uiAutomation.windows.joinToString("\n") { window ->
+        val texts = mutableListOf<String>()
+        walkNodes(window.root) { node ->
+            node.text?.toString()?.takeIf { it.isNotBlank() }?.let { texts += it }
+            node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { texts += "cd:$it" }
+        }
+        "  window type=${window.type} pkg=${window.root?.packageName} texts=$texts"
+    }
+
+    /** @return false if no node with that text is on screen in any window. */
+    fun tapNodeWithText(text: String): Boolean {
+        val bounds = findNodeBounds(text) ?: return false
+        shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
+        return true
     }
 
     fun pollUntil(

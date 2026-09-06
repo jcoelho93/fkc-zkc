@@ -70,6 +70,10 @@ class IntentionPromptController @Inject constructor(
         appLabel: String,
         onAnswer: (IntentionKind, String?) -> Unit,
         onDismiss: () -> Unit,
+        // Exposed so instrumented tests can assert the timeout behaviour without waiting out the
+        // real one. Production callers leave both alone.
+        idleDismissMillis: Long = IDLE_DISMISS_MILLIS,
+        engagedIdleDismissMillis: Long = ENGAGED_IDLE_DISMISS_MILLIS,
     ): Boolean = window.show(
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -89,12 +93,19 @@ class IntentionPromptController @Inject constructor(
             onAnswer = onAnswer,
             onDismiss = onDismiss,
             onRequestTextEntry = ::requestTextEntry,
+            idleDismissMillis = idleDismissMillis,
+            engagedIdleDismissMillis = engagedIdleDismissMillis,
         )
     }
 
     /**
      * Makes the live prompt focusable so the IME can open. Only called when the user taps the one
      * chip that needs typing - until then the window is deliberately incapable of taking input.
+     *
+     * There is no matching "give focus back" call, and none is needed: the prompt always has a
+     * running dismiss timer (see IntentionPromptScreen), and taking the window down returns focus
+     * to the app underneath. Every show() builds fresh LayoutParams, so the next prompt starts
+     * non-focusable again rather than inheriting this.
      */
     private fun requestTextEntry() {
         window.updateParams { params ->
