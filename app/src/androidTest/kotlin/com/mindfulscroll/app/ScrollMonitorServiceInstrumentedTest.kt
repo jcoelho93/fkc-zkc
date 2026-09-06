@@ -51,6 +51,9 @@ class ScrollMonitorServiceInstrumentedTest {
 
     @After
     fun tearDown() {
+        // See the note on OverlayRenderInstrumentedTest.tearDown: a throwing @After hides the
+        // @Before failure that caused it.
+        if (!::harness.isInitialized) return
         harness.disableService()
     }
 

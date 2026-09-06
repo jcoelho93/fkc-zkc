@@ -57,6 +57,11 @@ class OverlayRenderInstrumentedTest {
 
     @After
     fun tearDown() {
+        // Guarded because an @After that throws REPLACES the @Before failure that caused it, and
+        // the setUp failure is always the one worth reading. This exact masking cost a full
+        // emulator round: two tests reported "lateinit property harness has not been initialized"
+        // and the real exception was nowhere in the report or the logcat.
+        if (!::harness.isInitialized) return
         InstrumentationRegistry.getInstrumentation().runOnMainSync { harness.overlayController.hide() }
         harness.disableService()
     }

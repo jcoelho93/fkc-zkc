@@ -72,10 +72,28 @@ class AccessibilityServiceHarness {
     val componentName: String =
         "${targetContext.packageName}/com.mindfulscroll.app.accessibility.ScrollMonitorService"
 
-    private val entryPoint: DiagnosticsEntryPoint = EntryPointAccessors.fromApplication(
-        targetContext.applicationContext,
-        DiagnosticsEntryPoint::class.java,
-    )
+    /**
+     * Wrapped so the failure names itself. On the release variant this is the first thing that
+     * touches the minified app, so it is where a stripped class or a broken Hilt graph shows up -
+     * and a bare NoClassDefFoundError from inside Dagger's generated code says nothing about
+     * which of those it was, or that R8 is even involved.
+     */
+    private val entryPoint: DiagnosticsEntryPoint = try {
+        EntryPointAccessors.fromApplication(
+            targetContext.applicationContext,
+            DiagnosticsEntryPoint::class.java,
+        )
+    } catch (error: Throwable) {
+        throw AssertionError(
+            "Could not read DiagnosticsEntryPoint out of the app's Hilt graph. On the release " +
+                "variant this usually means R8: either the entry point itself was stripped " +
+                "(check the keep rules in proguard-rules.pro) or a class only the test apk " +
+                "calls was removed from the app apk, which is the recurring app/test seam - see " +
+                "proguard-rules-instrumentation.pro. Underlying failure: " +
+                "${error.javaClass.name}: ${error.message}",
+            error,
+        )
+    }
 
     val diagnostics: ServiceDiagnostics = entryPoint.serviceDiagnostics()
 

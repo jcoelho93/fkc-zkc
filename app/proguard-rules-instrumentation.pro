@@ -35,3 +35,14 @@
 # on coroutines everywhere so most of this survives minification anyway, but the ones the tests
 # touch and the app does not would fail exactly like LazyKt did.
 -keep class kotlinx.coroutines.** { *; }
+
+# Hilt's entry-point accessors, which ONLY the test apk calls: the app itself never reaches into
+# its own graph this way, so R8 correctly strips them from a shipped build - and then the harness
+# cannot resolve them. The same app/test seam as androidx.tracing and kotlin.LazyKt above.
+#
+# Named as two specific classes rather than dagger.hilt.**: these are just the static lookup
+# helpers, so keeping them leaves the generated component, the modules and every injected class
+# fully minified. Hilt surviving minification is one of the things this run exists to check, and
+# keeping it wholesale would quietly cancel that.
+-keep class dagger.hilt.android.EntryPointAccessors { *; }
+-keep class dagger.hilt.EntryPoints { *; }
