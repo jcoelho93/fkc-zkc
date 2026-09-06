@@ -11,7 +11,8 @@ directly to `main`.
 
 1. Branch off `main` with a short descriptive name.
 2. Implement, and verify locally before pushing (see *Local loop* — it is fast, use it).
-3. Open the PR, then **enable auto-merge**: `gh pr merge <n> --auto --merge`.
+3. Open the PR, then **enable auto-merge**: `gh pr merge <n> --auto --squash`.
+   Squash, not merge — `--merge` is rejected outright (see *Branch rules* below).
 4. **Watch the GitHub Actions runs until they finish**, and confirm the PR actually merged.
    A PR left open, or auto-merge that silently did nothing, is an unfinished task.
 5. If CI fails, fix it on the same branch and keep watching. Do not hand back a red PR.
@@ -44,6 +45,16 @@ state. When something arrives:
 
 If a comment arrives after the PR has already merged, follow up in a new branch and PR rather
 than pushing to `main`.
+
+### Subagents share this working tree
+
+A subagent launched into this repo gets the **same checkout**, not a copy. One running
+`git checkout main` will switch the branch out from under whatever else is in progress, and
+work in flight ends up committed to the wrong branch.
+
+Either give the agent an isolated worktree (`isolation: "worktree"`), or do not run one
+concurrently with your own uncommitted changes here. Before committing after any concurrent
+agent has run, check `git branch --show-current` is still what you expect.
 
 ### Ask first, or just ship?
 
@@ -89,6 +100,28 @@ every other project on this machine). Export per-command. `local.properties` hol
 `sdk.dir` and is gitignored.
 
 ## CI
+
+### Branch rules
+
+`main` is guarded by **two overlapping mechanisms**, and both apply — the stricter wins:
+
+- A **repository ruleset** (Settings → Rules), which is the one with teeth.
+- Classic **branch protection**, requiring all three checks and `strict` (branch must be up to
+  date with `main`).
+
+What that means in practice:
+
+- **Squash only.** The ruleset allows `squash` and `rebase`, not merge commits, so
+  `gh pr merge --merge` fails with *"Merge method merge commits are not allowed"* no matter
+  what the repo's own merge-method settings say.
+- **Commits must be signed.** This is why squash is the one that actually works: GitHub signs
+  the single commit it creates. A rebase would replay the branch's own unsigned commits onto
+  `main` and be rejected.
+- **Review threads must be resolved** before merging. An unresolved comment blocks the merge
+  even with every check green.
+- **Nobody bypasses** — the ruleset has no bypass actors.
+- Because classic protection sets `strict`, a branch goes `BEHIND` the moment another PR
+  merges. Merge `main` into the branch and push; CI re-runs and auto-merge picks it up again.
 
 `main` is protected and **requires all three checks below to pass** before anything merges.
 That is what makes `--auto` meaningful: without required checks, GitHub auto-merge has nothing
