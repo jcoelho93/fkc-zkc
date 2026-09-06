@@ -43,7 +43,7 @@ class IntentionPromptInstrumentedTest {
         )
         entryPoint.appSettings().setIntentionCaptureEnabled(true)
         runBlocking {
-            entryPoint.monitoredAppRepository().saveSelection(
+            entryPoint.monitoredAppRepository().applySelection(
                 listOf(
                     MonitoredAppEntity(
                         packageName = monitoredPackage,

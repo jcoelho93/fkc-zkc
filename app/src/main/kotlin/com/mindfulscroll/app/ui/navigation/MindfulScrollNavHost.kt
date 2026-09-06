@@ -38,7 +38,18 @@ fun MindfulScrollNavHost(navController: NavHostController = rememberNavControlle
             )
         }
         composable(Routes.MAIN) {
-            MainScreen()
+            MainScreen(
+                onEditMonitoredApps = { navController.navigate(Routes.EDIT_MONITORED_APPS) },
+            )
+        }
+        composable(Routes.EDIT_MONITORED_APPS) {
+            // Both callbacks pop rather than navigate: this is an edit of a list that already
+            // exists, not a step in a flow, so saving and backing out land in the same place -
+            // back on MAIN, with the Settings tab still selected.
+            AppSelectionScreen(
+                onDone = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }

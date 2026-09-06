@@ -8,4 +8,10 @@ object Routes {
     const val DASHBOARD = "main/dashboard"
     const val SETTINGS = "main/settings"
     const val DIAGNOSTICS = "main/diagnostics"
+
+    /**
+     * The app picker reached from Settings, as opposed to [APP_SELECTION], which is the
+     * onboarding step. Same screen, different entry: this one has somewhere to go back to.
+     */
+    const val EDIT_MONITORED_APPS = "main/settings/apps"
 }

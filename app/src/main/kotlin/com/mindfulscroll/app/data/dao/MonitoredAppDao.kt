@@ -14,6 +14,9 @@ interface MonitoredAppDao {
     @Query("SELECT * FROM monitored_apps ORDER BY appLabel COLLATE NOCASE")
     fun observeAll(): Flow<List<MonitoredAppEntity>>
 
+    @Query("SELECT * FROM monitored_apps")
+    suspend fun getAll(): List<MonitoredAppEntity>
+
     @Query("SELECT * FROM monitored_apps WHERE isMonitored = 1")
     suspend fun getMonitoredApps(): List<MonitoredAppEntity>
 
@@ -31,6 +34,9 @@ interface MonitoredAppDao {
 
     @Update
     suspend fun update(app: MonitoredAppEntity)
+
+    @Query("DELETE FROM monitored_apps WHERE packageName IN (:packageNames)")
+    suspend fun deleteByPackageNames(packageNames: List<String>)
 
     @Query("SELECT COUNT(*) FROM monitored_apps")
     suspend fun count(): Int

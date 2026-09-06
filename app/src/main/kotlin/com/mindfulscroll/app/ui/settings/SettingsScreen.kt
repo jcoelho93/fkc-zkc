@@ -31,6 +31,7 @@ import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 @Composable
 fun SettingsScreen(
     onOpenDiagnostics: () -> Unit = {},
+    onEditMonitoredApps: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val apps by viewModel.apps.collectAsState()
@@ -52,11 +53,16 @@ fun SettingsScreen(
                 Text("Diagnostics: is scroll detection actually working?")
             }
         }
+        item {
+            TextButton(onClick = onEditMonitoredApps) {
+                Text(if (apps.isEmpty()) "Choose apps to monitor" else "Add or remove apps")
+            }
+        }
         if (apps.isEmpty()) {
             item {
                 Text(
-                    "No apps selected yet. Pick apps to monitor from onboarding, or reinstall " +
-                        "to redo that step.",
+                    "No apps are on your list yet, so nothing is being monitored. " +
+                        "Use \"Choose apps to monitor\" above to add some.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
