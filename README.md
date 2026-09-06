@@ -21,12 +21,13 @@ No account, no cloud sync, no analytics, no ads — and no network permission, s
 3. **Thresholds** — per app, default **40 scrolls or 10 minutes of continuous foreground
    time**, whichever comes first.
 4. **Pause screen** — a full-screen overlay showing your scroll count and session time, the
-   prompt *"What are you looking for right now?"*, and two choices: close the app, or continue
-   through a friction step (a 10-second countdown, or typing "I choose to keep scrolling",
-   per-app setting). Continuing gives you 5 more minutes before the pause screen returns.
+   prompt *"What are you looking for right now?"*, and two choices: close the app, or continue.
+   Both are available immediately — the countdown and typed-phrase gates were removed, because
+   raising the cost of continuing never surfaced *why* you opened the app. Continuing gives you
+   5 more minutes before the pause screen returns.
 5. **Dashboard** — scrolls and time in app for today and the past 7 days, plus how often you
    closed vs. continued.
-6. **Settings** — toggle apps, edit thresholds and friction mode, and a **Diagnostics** screen
+6. **Settings** — toggle apps, edit thresholds, and a **Diagnostics** screen
    for when detection misbehaves.
 
 The chips are deliberately not framed as good or bad: "Habit" and "Distraction" are honest

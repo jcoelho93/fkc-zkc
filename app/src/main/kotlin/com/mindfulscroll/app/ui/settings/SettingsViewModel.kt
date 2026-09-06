@@ -3,7 +3,6 @@ package com.mindfulscroll.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mindfulscroll.app.data.AppSettings
-import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,9 +35,5 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             monitoredAppRepository.updateThresholds(packageName, scrollThreshold, timeThresholdMinutes)
         }
-    }
-
-    fun updateFrictionMode(packageName: String, mode: FrictionMode) {
-        viewModelScope.launch { monitoredAppRepository.updateFrictionMode(packageName, mode) }
     }
 }

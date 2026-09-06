@@ -7,11 +7,6 @@ import androidx.room.PrimaryKey
 const val DEFAULT_SCROLL_THRESHOLD = 40
 const val DEFAULT_TIME_THRESHOLD_MINUTES = 10
 
-enum class FrictionMode {
-    COUNTDOWN,
-    TYPED_PHRASE,
-}
-
 @Entity(tableName = "monitored_apps")
 data class MonitoredAppEntity(
     @PrimaryKey val packageName: String,
@@ -19,6 +14,5 @@ data class MonitoredAppEntity(
     val isMonitored: Boolean,
     val scrollThreshold: Int = DEFAULT_SCROLL_THRESHOLD,
     val timeThresholdMinutes: Int = DEFAULT_TIME_THRESHOLD_MINUTES,
-    val frictionMode: FrictionMode = FrictionMode.COUNTDOWN,
     val addedAtMillis: Long,
 )

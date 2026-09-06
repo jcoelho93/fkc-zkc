@@ -34,5 +34,43 @@ val MIGRATION_1_2 = Migration(1, 2) { db: SupportSQLiteDatabase ->
     )
 }
 
+/**
+ * Retires FrictionMode (see issue #3). The countdown / typed-phrase gate is gone, so the column
+ * that chose between them means nothing.
+ *
+ * **This one deliberately discards data**, which is why it is worth reading carefully before
+ * copying its shape anywhere else.
+ *
+ * `monitored_apps` is configuration, not history: which apps are watched and their two
+ * thresholds. It is re-created by picking apps in Settings, which takes under a minute. The
+ * tables that hold the data this app exists to accumulate - `daily_app_stats`, `overlay_events`,
+ * `intentions` - are untouched here, and must stay that way. Losing a scroll history has no
+ * remedy; there is no backup and no server.
+ *
+ * That distinction is the entire reason this is a drop-and-recreate rather than the usual
+ * create-new / copy / drop / rename. SQLite gained `DROP COLUMN` only in 3.35 (API 31) and this
+ * app supports API 26, so preserving the rows would mean the table-rebuild dance - the riskiest
+ * shape of migration there is. Choosing not to preserve four columns of re-pickable config
+ * removes that risk entirely rather than managing it.
+ *
+ * The CREATE statement is copied verbatim from Room's own exported schema
+ * (app/schemas/com.mindfulscroll.app.data.AppDatabase/3.json, `createSql`) with only the
+ * ${'$'}{TABLE_NAME} placeholder substituted, exactly as MIGRATION_1_2 is. Room verifies the
+ * resulting schema on open, so a statement differing even by a nullability fails at startup.
+ */
+val MIGRATION_2_3 = Migration(2, 3) { db: SupportSQLiteDatabase ->
+    db.execSQL("DROP TABLE IF EXISTS `monitored_apps`")
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS `monitored_apps` (" +
+            "`packageName` TEXT NOT NULL, " +
+            "`appLabel` TEXT NOT NULL, " +
+            "`isMonitored` INTEGER NOT NULL, " +
+            "`scrollThreshold` INTEGER NOT NULL, " +
+            "`timeThresholdMinutes` INTEGER NOT NULL, " +
+            "`addedAtMillis` INTEGER NOT NULL, " +
+            "PRIMARY KEY(`packageName`))",
+    )
+}
+
 /** Every migration, in one place, so DatabaseModule cannot forget to register one. */
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)

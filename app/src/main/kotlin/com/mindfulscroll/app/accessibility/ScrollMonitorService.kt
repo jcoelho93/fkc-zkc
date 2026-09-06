@@ -368,7 +368,6 @@ class ScrollMonitorService : AccessibilityService() {
                 appLabel = app.appLabel,
                 scrollCount = scrollCount,
                 sessionMinutes = (sessionElapsedMillis / 60_000L).toInt(),
-                frictionMode = app.frictionMode,
             ),
             onCloseApp = {
                 serviceScope.launch { resolveOverlay(app.packageName, OverlayChoice.CLOSE_APP) }

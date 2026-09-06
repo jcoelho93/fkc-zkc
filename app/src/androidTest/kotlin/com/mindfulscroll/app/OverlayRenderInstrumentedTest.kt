@@ -5,7 +5,6 @@ import android.util.Log
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.overlay.OverlayUiState
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -91,7 +90,6 @@ class OverlayRenderInstrumentedTest {
                     appLabel = "Test app",
                     scrollCount = 42,
                     sessionMinutes = 11,
-                    frictionMode = FrictionMode.COUNTDOWN,
                 ),
                 onCloseApp = {},
                 onContinue = {},

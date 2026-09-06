@@ -12,7 +12,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 
 @Composable
@@ -76,9 +74,8 @@ fun SettingsScreen(
         AppThresholdDialog(
             app = app,
             onDismiss = { editingApp = null },
-            onSave = { scrollThreshold, timeMinutes, frictionMode ->
+            onSave = { scrollThreshold, timeMinutes ->
                 viewModel.updateThresholds(app.packageName, scrollThreshold, timeMinutes)
-                viewModel.updateFrictionMode(app.packageName, frictionMode)
                 editingApp = null
             },
         )
@@ -135,8 +132,7 @@ private fun AppSettingsRow(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(app.appLabel, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "${app.scrollThreshold} scrolls or ${app.timeThresholdMinutes} min · " +
-                            if (app.frictionMode == FrictionMode.COUNTDOWN) "10s countdown" else "typed phrase",
+                        "${app.scrollThreshold} scrolls or ${app.timeThresholdMinutes} min",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -153,11 +149,10 @@ private fun AppSettingsRow(
 private fun AppThresholdDialog(
     app: MonitoredAppEntity,
     onDismiss: () -> Unit,
-    onSave: (scrollThreshold: Int, timeThresholdMinutes: Int, frictionMode: FrictionMode) -> Unit,
+    onSave: (scrollThreshold: Int, timeThresholdMinutes: Int) -> Unit,
 ) {
     var scrollText by remember { mutableStateOf(app.scrollThreshold.toString()) }
     var timeText by remember { mutableStateOf(app.timeThresholdMinutes.toString()) }
-    var frictionMode by remember { mutableStateOf(app.frictionMode) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -183,22 +178,6 @@ private fun AppThresholdDialog(
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                 )
-
-                Text(
-                    "\"5 more minutes\" friction",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
-                )
-                FrictionModeOption(
-                    label = "10-second countdown",
-                    selected = frictionMode == FrictionMode.COUNTDOWN,
-                    onSelect = { frictionMode = FrictionMode.COUNTDOWN },
-                )
-                FrictionModeOption(
-                    label = "Type a short phrase (stronger friction)",
-                    selected = frictionMode == FrictionMode.TYPED_PHRASE,
-                    onSelect = { frictionMode = FrictionMode.TYPED_PHRASE },
-                )
             }
         },
         confirmButton = {
@@ -206,7 +185,7 @@ private fun AppThresholdDialog(
                 onClick = {
                     val scroll = scrollText.toIntOrNull()?.coerceAtLeast(1) ?: app.scrollThreshold
                     val minutes = timeText.toIntOrNull()?.coerceAtLeast(1) ?: app.timeThresholdMinutes
-                    onSave(scroll, minutes, frictionMode)
+                    onSave(scroll, minutes)
                 },
             ) {
                 Text("Save")
@@ -216,12 +195,4 @@ private fun AppThresholdDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
-}
-
-@Composable
-private fun FrictionModeOption(label: String, selected: Boolean, onSelect: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Text(label, modifier = Modifier.padding(start = 4.dp))
-    }
 }
