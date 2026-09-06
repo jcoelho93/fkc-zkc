@@ -1,315 +1,255 @@
 # Mindful Scroll
 
-Mindful Scroll is a free, open-source Android app that helps you notice and
-interrupt compulsive infinite-scrolling in apps like Instagram, Reddit,
-Facebook, TikTok, and X/Twitter. It does not block anything by force - it
-watches for scroll gestures and time spent in the apps *you* choose, and
-shows a short pause screen when you cross a threshold *you* set, asking you
-to make a deliberate choice about what happens next.
+A free, open-source Android app that helps you notice and interrupt compulsive
+infinite-scrolling in apps like Instagram, Reddit, Facebook, TikTok and X/Twitter.
 
-There is no account, no cloud sync, no analytics, and no ads. Mindful
-Scroll cannot send data anywhere even if it wanted to - see [Privacy](#privacy--permissions)
-below.
+It blocks nothing by force. It watches time and scrolling in the apps *you* choose, asks
+what you came for, and shows a pause screen when you cross a threshold *you* set.
 
-## How it works
+No account, no cloud sync, no analytics, no ads — and no network permission, so it
+*cannot* send data anywhere. See [Privacy & permissions](#privacy--permissions).
 
-1. **Onboarding** walks you through granting two Android permissions and
-   choosing which installed apps to monitor.
-2. An **Accessibility Service** watches for scroll gestures
-   (`TYPE_VIEW_SCROLLED`) inside monitored apps only, while they're in the
-   foreground.
-3. Each monitored app has a configurable threshold - by default, **40
-   scrolls or 10 minutes of continuous foreground time, whichever comes
-   first**.
-4. Crossing the threshold shows a **full-screen interruption overlay**:
-   your scroll count and session time, a reflective prompt ("What are you
-   looking for right now?"), and two choices - close the app, or continue
-   after a deliberate friction step (a 10-second countdown, or typing a
-   short phrase, depending on your settings).
-5. A **Dashboard** shows your scroll counts and time-in-app for today and
-   the past 7 days, plus how often you closed the app vs. chose to
-   continue.
+---
 
-### How scroll + foreground detection works (and avoids false positives)
+## What it does today
 
-The trickiest part of this app is reliably knowing "which app is in the
-foreground, and is this scroll event actually happening inside it." The
-approach:
+1. **Onboarding** — grant two permissions, pick which installed apps to monitor.
+2. **Intention prompt** — when a monitored app comes to the foreground, a small strip at the
+   bottom asks *"What are you hoping to find?"* with chips (Connection, Entertainment,
+   Distraction, Habit, Checking something specific) and an optional note. It never takes a tap
+   or a keystroke from the app underneath; ignore it and it goes away. Turn it off in Settings.
+3. **Thresholds** — per app, default **40 scrolls or 10 minutes of continuous foreground
+   time**, whichever comes first.
+4. **Pause screen** — a full-screen overlay showing your scroll count and session time, the
+   prompt *"What are you looking for right now?"*, and two choices: close the app, or continue
+   through a friction step (a 10-second countdown, or typing "I choose to keep scrolling",
+   per-app setting). Continuing gives you 5 more minutes before the pause screen returns.
+5. **Dashboard** — scrolls and time in app for today and the past 7 days, plus how often you
+   closed vs. continued.
+6. **Settings** — toggle apps, edit thresholds and friction mode, and a **Diagnostics** screen
+   for when detection misbehaves.
 
-- **Foreground tracking** uses `TYPE_WINDOW_STATE_CHANGED` accessibility
-  events, which fire the instant a new window becomes active and carry
-  that window's package name. This is tracked live in the service - no
-  polling, no lag.
-- **Scroll counting** only happens when a `TYPE_VIEW_SCROLLED` event's
-  package name matches the currently tracked foreground package **and**
-  that package is in your monitored list. Two deliberate guards against
-  false positives:
-  - Mindful Scroll's own package is never eligible to be monitored (it's
-    excluded from the app picker, with a second explicit check as a
-    backstop), so scrolling this app's own dashboard or settings screens
-    never counts as a "scroll."
-  - System UI (notification shade, recents) reports its own package name
-    on its own window-state-change events, so it never matches a
-    monitored app's package either - and switching to it correctly ends
-    the "continuous foreground time" session clock, consistent with the
-    threshold being about *continuous* time in the app.
-- `UsageStatsManager` is used only for the aggregate "time in app" numbers
-  shown on the dashboard, not for live detection - the accessibility
-  events are more responsive for that.
-- A single finger-swipe can fire several matching events (nested scroll
-  containers, feed-of-feeds layouts), so events for the same app within
-  ~300ms of each other are treated as one logical scroll. This is a
-  tunable MVP judgment call, not a precise measurement.
+The chips are deliberately not framed as good or bad: "Habit" and "Distraction" are honest
+answers, and nothing scores you for giving them.
 
-**Scroll *counting* cannot be trusted as the only trigger.** `TYPE_VIEW_SCROLLED`
-is a legacy `View.scrollBy()`-driven event: `ScrollView`/`ListView` fire
-it reliably, but `RecyclerView` (most modern feed apps) and Jetpack
-Compose's `LazyColumn` move child content directly instead of calling
-`View.scrollBy()`, so they often don't fire it - confirmed empirically,
-not assumed: `ScrollEventDetectionTest` (see Testing below) scrolls a
-real Compose `LazyColumn` 15 times on an emulator and checks which
-`AccessibilityEvent` types actually arrive. The result was zero of both
-`TYPE_VIEW_SCROLLED` and the `TYPE_WINDOW_CONTENT_CHANGED` fallback
-`ScrollMonitorService` also listens for. Both are still wired up (they
-may help for legacy View-based feeds, and cost nothing when they don't
-fire), but scroll count is a best-effort number for Compose-heavy apps,
-not a guarantee.
+## Why it works this way
 
-Because of that, **the time-based half of the threshold is checked on
-its own schedule, independent of scroll events entirely**: entering a
-monitored app's foreground arms a one-shot delayed check (`delay()` in
-the service's coroutine scope) for its configured time threshold (or the
-active grace-period deadline, if shorter), which re-evaluates and shows
-the overlay if the session is still live when it fires. Scroll events,
-when they do arrive, check the same threshold immediately instead of
-waiting - whichever path notices first wins. Earlier versions of this
-service only ever evaluated the threshold from inside the scroll-event
-handler, which meant the time-based trigger silently never fired for any
-app that doesn't emit scroll events - this is why.
+Infinite feeds are not compelling by accident. Two findings explain the pull, and both shape
+the design.
 
-The interruption overlay itself is drawn as a `TYPE_ACCESSIBILITY_OVERLAY`
-window rather than a `SYSTEM_ALERT_WINDOW` - any process that owns a
-currently-enabled accessibility service is allowed to add this window
-type, so no separate "draw over other apps" permission is requested.
+**Variable-ratio reinforcement.** A reward that arrives unpredictably, on an unpredictable
+schedule, produces the most persistent behaviour there is — far more persistent than a reward
+that arrives every time. A feed that *sometimes* has something good is therefore much harder to
+put down than one that reliably does. The uncertainty is the hook, not the content.
 
-### Diagnostics
+**Reward-prediction error.** The dopamine response tracks *anticipation*, not the reward
+itself. It fires before you see the next post, on the chance that it might be better than
+expected. The pull lives in the next swipe rather than in what you find — which is why "just
+one more" keeps working after twenty dull posts, and why scrolling can feel bad the whole time
+and still continue.
 
-Settings has a **Diagnostics** screen (backed by `ServiceDiagnostics`, an
-in-memory singleton the accessibility service updates live) showing, in
-real time: whether the service is connected, which apps are monitored,
-the current foreground package, raw counts of `TYPE_VIEW_SCROLLED` /
-`TYPE_WINDOW_CONTENT_CHANGED` events seen from *any* app, how many of
-those were actually counted as scrolls, and a recent activity log. If the
-interruption never fires, this is the first place to look: if both raw
-counters stay at zero while you scroll a monitored app, the OS isn't
-delivering either signal for it and detection needs a different approach
-for that specific app; if the raw counters climb but nothing gets
-counted, the foreground-matching logic is the problem instead. The same
-detail is also logged to Logcat under the tag `MindfulScroll`.
-
-The overlay is reported as two separate numbers - **overlay windows
-added** and **overlay windows actually drawn** - because those answer
-different questions. "Added" only means `WindowManager.addView()` returned
-without throwing; the window can still be accepted and then never laid
-out, sized 0x0, or never composed, in which case nothing appears and every
-other counter still reads like success. "Drawn" means the window produced
-a real, non-zero-sized frame, which is the only evidence the pause screen
-was on screen. If those two diverge, **last overlay render** says what the
-window did instead - `OverlayController` gives each window two seconds to
-produce a frame and writes its own complaint there if none arrives.
-
-### Verifying a release build
-
-The instrumented suite runs on an emulator against **both** the debug and
-the release (R8-minified) variant on every push
-(`.github/workflows/instrumented-tests.yml`). That matters because the two
-things most likely to break silently here are runtime facts about the
-shipped artifact that no static check of the APK can answer: the event
-type mask `AccessibilityManagerService` resolves for the service (asserted
-to be exactly `typeViewScrolled|typeWindowContentChanged|typeWindowStateChanged`,
-because a partially-resolved mask fails just as quietly as an empty one),
-and whether the `TYPE_ACCESSIBILITY_OVERLAY` window still draws. R8's own
-account of what it kept and removed is archived as the `r8-release-mapping`
-CI artifact. The keep rules in `app/proguard-rules.pro` each name the
-specific thing that breaks without them.
-
-To run the release variant locally:
-
-```
-./gradlew connectedReleaseAndroidTest \
-    -Pmindfulscroll.testBuildType=release \
-    -Pmindfulscroll.signReleaseWithDebugKey=true
-```
+Neither loop is broken by a wall. A hard block fights the compulsion at the exact moment you
+want it most, and mostly teaches you to route around the block. What does interrupt the loop is
+awareness inside it: a question at the moment you open the app, while your intention is still
+legible to you, and a pause at a limit you chose while calm. Hence a prompt, a pause and honest
+numbers — and never streaks, points or badges, which would just be another variable-ratio
+schedule wearing a helpful face.
 
 ## Privacy & permissions
 
-Mindful Scroll requests no network permission of any kind - it is
-architecturally incapable of sending data anywhere. Everything is stored
-in a local Room (SQLite) database on your device only, and cloud
-backup/device-transfer is explicitly disabled for the app's data
-(`android:allowBackup="false"` in `AndroidManifest.xml`).
+- **No network permission of any kind** — `android.permission.INTERNET` is deliberately never
+  declared, so the app is architecturally incapable of phoning home.
+- Everything lives in a local Room (SQLite) database on your device.
+- Cloud backup and device transfer are disabled for the app's data
+  (`android:allowBackup="false"`).
+- No third-party trackers, ad SDKs, analytics or crash reporting.
 
-Two permissions are required, both explained in plain language during
-onboarding:
+Two permissions are required, both explained in plain language during onboarding:
 
-- **Accessibility service** (`BIND_ACCESSIBILITY_SERVICE`): lets the app
-  notice scroll gestures in the apps you choose to monitor, and draw the
-  pause screen. It does not read screen content (`canRetrieveWindowContent`
-  is `false`) and only reacts to scroll and window-change events.
-- **Usage access** (`PACKAGE_USAGE_STATS`): lets the app read how long
-  monitored apps have been in the foreground, for your own stats. This is
-  a "special access" permission - Android only lets an app declare it and
-  link the user to the system settings screen to turn it on; it is never
-  auto-granted.
+| Permission | Why it is needed | Notes |
+|---|---|---|
+| **Accessibility service** (`BIND_ACCESSIBILITY_SERVICE`) | Notice scroll and window events in the apps you chose, and draw the prompt and pause screen. | Does **not** read screen content (`canRetrieveWindowContent` is `false`). Reacts only to scroll and window-change events. |
+| **Usage access** (`PACKAGE_USAGE_STATS`) | Read how long monitored apps were in the foreground, for your own stats. | A "special access" permission: Android only lets an app link you to the system settings screen. Never auto-granted. |
+
+The only other declared permission is `RECEIVE_BOOT_COMPLETED`, which re-schedules the daily
+maintenance job after a reboot.
 
 ## Installing on your phone (no computer needed)
 
-**Recommended: [Obtainium](https://github.com/ImranR98/Obtainium).** Install
-Obtainium, add this repository as an app source, and it will check for new
-[Releases](../../releases), notify you, and install them in place. Set up
-once, then updates need nothing from you.
+**Recommended: [Obtainium](https://github.com/ImranR98/Obtainium).** Install Obtainium, add
+this repository as an app source, and it checks [Releases](../../releases), notifies you, and
+installs updates in place. Set up once; updates then need nothing from you.
 
-The reason to prefer it over downloading the APK by hand isn't just
-convenience. Obtainium installs through Android's session-based package
-installer, so:
+Preferring it is not just convenience. Obtainium installs through Android's session-based
+package installer, so:
 
-- updates replace the installed app instead of being a fresh install, which
-  means **the accessibility permission you grant once keeps working** rather
-  than needing to be re-enabled every time; and
-- the app is treated as coming from an app store, which avoids Android 13+
-  putting the accessibility toggle behind *App info -> ⋮ -> "Allow
-  restricted settings"*.
+- updates **replace** the installed app instead of being a fresh install, which means **the
+  accessibility permission you grant once keeps working** instead of needing to be re-enabled
+  every time; and
+- the app counts as coming from an app store, which avoids Android 13+ hiding the accessibility
+  toggle behind *App info → ⋮ → "Allow restricted settings"*.
 
-You can still download `app-release.apk` from a release and tap it, but a
-manual install is a fresh install and you'll get both of the prompts above
-each time.
+**Manual:** download `app-release.apk` from a release and tap it. It works, but every install is
+a fresh install, so you get both of the prompts above each time.
 
-Either way this is a real signed release build, not the debug-keystore APK
-this project used to publish - which is what Play Protect was flagging.
-To build it yourself instead, see [Building](#building) below.
+Either way it is a real signed release build, not the debug-keystore APK this project used to
+publish — which is what Play Protect was flagging. To build it yourself, see
+[Building](#building).
 
-## Tech stack
+## How detection works
 
-- Kotlin, Jetpack Compose
-- Min SDK 26 (Android 8.0), compile/target SDK 35
-- Room for local storage, WorkManager for daily maintenance, Hilt for DI
-- No third-party trackers, ad SDKs, analytics, or crash reporting
+The hard part is knowing *which app is in the foreground* and *whether this scroll happened
+inside it*.
 
-## Project structure
+- **Foreground tracking** uses `TYPE_WINDOW_STATE_CHANGED` events, which fire the moment a
+  window becomes active and carry its package name. Live, no polling.
+- **Scroll counting** requires a `TYPE_VIEW_SCROLLED` event whose package matches the tracked
+  foreground package *and* is on your monitored list. Mindful Scroll's own package can never be
+  monitored, so its own screens never count; system UI (shade, recents) reports its own package,
+  so it never matches either — and switching to it correctly ends the continuous-session clock.
+- Nested scroll containers can fire several events per swipe, so events from the same app within
+  ~300 ms are treated as one scroll. A tunable MVP judgment call, not a measurement.
+- **`UsageStatsManager`** is used only for the aggregate "time in app" figures on the dashboard,
+  never for live detection.
 
-Single `:app` module, organized by feature area rather than by layer:
+**Scroll counting cannot be the only trigger.** `TYPE_VIEW_SCROLLED` is a legacy
+`View.scrollBy()` event: `ScrollView`/`ListView` fire it, but `RecyclerView` and Compose's
+`LazyColumn` — most modern feeds — move content without it. `ScrollEventDetectionTest` scrolls a
+real Compose `LazyColumn` 15 times on an emulator and records **zero** of both that event and
+the `TYPE_WINDOW_CONTENT_CHANGED` fallback. Both stay wired up (they may help legacy View-based
+feeds, and cost nothing when they don't fire), but scroll count is best-effort.
+
+So **the time half of the threshold runs on its own schedule**, independent of scroll events:
+entering a monitored app arms a one-shot delayed check for its time threshold (or the shorter
+grace deadline), which re-evaluates when it fires. Scroll events, when they arrive, check the
+same threshold immediately — whichever path notices first wins. Earlier versions only ever
+evaluated the threshold inside the scroll handler, so the time trigger silently never fired for
+apps that emit no scroll events.
+
+The pause screen and the intention prompt are both `TYPE_ACCESSIBILITY_OVERLAY` windows rather
+than `SYSTEM_ALERT_WINDOW`, so **no "draw over other apps" permission is requested**.
+
+### Diagnostics
+
+Settings → Diagnostics shows, live: whether the service is connected, monitored apps, current
+foreground package, raw counts of `TYPE_VIEW_SCROLLED` / `TYPE_WINDOW_CONTENT_CHANGED` from
+*any* app, how many were counted as scrolls, and a recent activity log. The same detail goes to
+Logcat under tag `MindfulScroll`. If the interruption never fires:
+
+- raw counters stay at **zero** while you scroll → the OS delivers neither signal for that app;
+- raw counters climb but nothing is counted → the foreground-matching logic is at fault.
+
+Overlays are reported as two numbers — **windows added** and **windows actually drawn**.
+"Added" only means `addView()` returned; the window can still be accepted and then never laid
+out, sized 0×0 or never composed, while every other counter reads like success. "Drawn" means a
+real non-zero-sized frame appeared. When the two diverge, **last overlay render** says what
+happened instead — each window gets two seconds to produce a frame and files its own complaint
+if none arrives.
+
+## Building
+
+Requires **JDK 17** and the Android SDK. Min SDK 26 (Android 8.0), compile/target SDK 35.
+Kotlin, Jetpack Compose, Room, WorkManager, Hilt.
+
+```bash
+./gradlew build                     # debug + release, lint
+./gradlew test                      # unit tests (threshold logic, Room DAOs via Robolectric)
+./gradlew connectedDebugAndroidTest # instrumented - needs an emulator/device
+```
+
+No `local.properties` is checked in: point `ANDROID_HOME` / `sdk.dir` at your SDK, or let
+Android Studio configure it.
+
+Single `:app` module, organised by feature:
 
 ```
 app/src/main/kotlin/com/mindfulscroll/app/
 ├── accessibility/   ScrollMonitorService + foreground/permission checks
 ├── data/            Room entities, DAOs, database, repositories, prefs
+├── intention/       The "what are you hoping to find?" prompt + its Compose UI
 ├── overlay/         The interruption overlay window + its Compose UI
 ├── stats/           Threshold logic, usage-access check, WorkManager jobs
-├── ui/              Onboarding, app selection, dashboard, settings, nav
+├── ui/              Onboarding, app selection, dashboard, settings, diagnostics, nav
 ├── di/              Hilt modules
 ├── MainActivity.kt
 └── MindfulScrollApp.kt
 ```
 
-## Building
+### CI
 
-Requires JDK 17 and the Android SDK (compile/target SDK 35; install via
-Android Studio's SDK Manager or `sdkmanager`).
+Three required checks on every PR against `main`:
+
+| Check | What it runs |
+|---|---|
+| `build` | `./gradlew build` + unit tests; archives R8's `mapping/usage/seeds`. |
+| `instrumented-tests (debug)` | The emulator suite on the debug APK. |
+| `instrumented-tests (release)` | The same suite on the **R8-minified** APK. |
+
+The release run is not a duplicate: it answers the two runtime questions no static check of the
+APK can. Does the system still resolve the full event mask (asserted to be exactly
+`typeViewScrolled|typeWindowContentChanged|typeWindowStateChanged` — a partially resolved mask
+fails as quietly as an empty one), and does the `TYPE_ACCESSIBILITY_OVERLAY` window still draw?
+Keep rules in `app/proguard-rules.pro` each name the specific thing that breaks without them.
+
+Locally, the release variant runs with:
 
 ```bash
-./gradlew build                     # assembles debug + release, runs lint
-./gradlew test                      # unit tests (threshold logic, Room DAOs via Robolectric)
-./gradlew connectedDebugAndroidTest # instrumented tests - needs a running emulator/device
+./gradlew connectedReleaseAndroidTest \
+    -Pmindfulscroll.testBuildType=release \
+    -Pmindfulscroll.signReleaseWithDebugKey=true
 ```
 
-There is no `local.properties` checked in - point `ANDROID_HOME` /
-`sdk.dir` at your SDK install, or open the project in Android Studio and
-let it configure this for you.
+## Releases & distribution
 
-CI runs three workflows on every push/PR against `main`:
-`.github/workflows/android.yml` (`./gradlew build` + `./gradlew test`),
-`.github/workflows/instrumented-tests.yml` (`connectedDebugAndroidTest`
-on a real emulator via `reactivecircus/android-emulator-runner`), and
-`.github/workflows/release-apk.yml` (publishes the debug APK, `main` only).
+Ships as a **signed APK on GitHub Releases**, installed and updated via Obtainium. No
+gatekeeper, no review queue, updates land in place.
 
-The instrumented tests exist specifically to verify device-only behavior
-that unit tests can't reach - see `ScrollEventDetectionTest` in
-`app/src/androidTest`, which checks empirically (by scrolling a real
-Compose `LazyColumn` and inspecting which `AccessibilityEvent`s actually
-fire) rather than assuming.
-
-## Distribution
-
-Ships as a **signed APK on GitHub Releases**, installed and updated via
-[Obtainium](https://github.com/ImranR98/Obtainium). No gatekeeper, no review
-queue, and updates land in place.
-
-Cutting a release:
-
-```
-git tag v0.2.0
-git push origin v0.2.0
+```bash
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
-That triggers `.github/workflows/release-apk.yml`, which builds a signed
-release APK and publishes it as `v0.2.0`. `versionCode` is derived from the
-tag, so it increases on every release - it has to, or nothing can tell a new
-build from the installed one. The workflow needs four repository secrets
+That triggers `.github/workflows/release-apk.yml`, which builds and publishes a signed release.
+`versionCode` is derived from the tag, so it always increases — it has to, or nothing can tell a
+new build from the installed one. Four repository secrets are needed
 (`SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`, `SIGNING_KEY_ALIAS`,
-`SIGNING_KEY_PASSWORD`); they're documented at the top of that file. The
-signing key is the app's identity to Android - back it up, because replacing
-it forces everyone to uninstall and start over rather than update.
+`SIGNING_KEY_PASSWORD`), documented at the top of that workflow. **Back up the signing key** —
+it is the app's identity to Android, and replacing it forces everyone to uninstall and start
+over.
 
-**Not the Play Store.** Play review is strict about the Accessibility API
-being used for anything other than assisting users with disabilities. This
-app isn't eligible for the `isAccessibilityTool` declaration (that's reserved
-for genuine disability tools), so listing it would require an accessibility
-declaration, a prominent in-app disclosure and an affirmative consent flow,
-under the tighter review that took effect in January 2026 - with real
-rejection risk at the end of it.
+**Not the Play Store.** Play review is strict about the Accessibility API being used for
+anything other than assisting users with disabilities, and this app isn't eligible for the
+`isAccessibilityTool` declaration (reserved for genuine disability tools). Listing it would mean
+an accessibility declaration, a prominent in-app disclosure and an affirmative consent flow,
+under the tighter review in force since January 2026 — with real rejection risk at the end.
 
-**F-Droid** remains a good later addition: the GPL-3.0 license fits, and a
-self-hosted repo would reuse the same signed artifacts. Not set up yet.
+**F-Droid** is a good later addition (GPL-3.0 fits, and a self-hosted repo would reuse the same
+signed artifacts). Not set up yet.
 
-## MVP limitations / known gaps
+## Known gaps
 
-This is a first pass, not a finished product:
+- Scroll counting is best-effort and is known to be zero for Compose feeds; the time half of the
+  threshold is the reliable path.
+- One continuous session per app at a time; no cross-app "total scrolling today" limit.
+- Session, grace-period and the scheduled time check live in memory in the accessibility service
+  (a coroutine `delay()`). They are not restored if the process is killed mid-session — the next
+  scroll or foreground change re-arms them, but a session that never scrolls and outlives a
+  process death won't trigger.
+- Apps to monitor are picked during onboarding; there is no way yet to add a newly installed app
+  without reinstalling. Existing ones can be toggled and re-thresholded in Settings.
+- Test coverage is thin: JVM unit tests for threshold logic and Room DAOs, plus three
+  instrumented tests (`ScrollEventDetectionTest`, `ScrollMonitorServiceInstrumentedTest`,
+  `OverlayRenderInstrumentedTest`). No UI flow tests for onboarding, app selection or dashboard.
+- Nothing yet reads back the captured intentions — they are stored, but not surfaced.
+- No launcher badge or notification summarising the day.
 
-- Scroll counting is a best-effort signal, not a precise measurement, and
-  is known to be zero for Compose-based feeds - see the detection notes
-  above. The time-based half of the threshold is the reliable path.
-- Only one continuous foreground session is tracked per app at a time; no
-  cross-app "total scrolling today" limit.
-- Session/grace-period state, and the scheduled time-threshold check
-  itself, live in memory in the accessibility service (a plain
-  coroutine `delay()`) and are not restored if the service process is
-  killed and restarted mid-session - the next scroll or foreground change
-  re-arms it, but a session that both never scrolls and outlives a
-  process death in between won't trigger.
-- Instrumented test coverage is limited to `ScrollEventDetectionTest`
-  (validates the accessibility-event detection mechanism itself) - no UI
-  flow tests (onboarding, app selection, dashboard) yet, only JVM unit
-  tests for threshold logic and Room DAOs plus that one instrumented test.
-- The app-selection list is shown once during onboarding; there is no way
-  yet to add a newly installed app to the monitored list without
-  reinstalling. Existing monitored apps can be toggled on/off and
-  re-thresholded from Settings.
-- No launcher-icon-badge or notification summarizing today's stats.
-
-### Explicitly out of scope for this MVP (future work)
-
-- iOS / Screen Time integration
-- Browser extension
-- Cross-device sync or accounts of any kind
-- Social or comparison features
-- Algorithmic feed replacement
+**Permanently out of scope:** iOS, browser extension, cross-device sync or accounts, social or
+comparison features, algorithmic feed replacement, and any gamification (streaks, points,
+badges) — which would reintroduce the exact mechanic this app exists to interrupt.
 
 ## License
 
-GPL-3.0. This project uses a strong copyleft license deliberately: any
-derivative or redistributed version of Mindful Scroll must also stay open
-source under the same terms, which matters for a tool whose entire pitch
-is "trust it because you can read exactly what it does with your usage
-data." A permissive license (MIT/Apache) would allow a closed-source fork
-that quietly adds tracking - GPL-3.0 makes that a license violation, not
-just a bad look. See [`LICENSE`](./LICENSE).
+GPL-3.0 — deliberately strong copyleft. Any derivative or redistributed version must stay open
+source under the same terms, which matters for a tool whose entire pitch is "trust it because
+you can read exactly what it does with your usage data." A permissive licence would allow a
+closed-source fork that quietly adds tracking; GPL-3.0 makes that a licence violation rather
+than just a bad look. See [`LICENSE`](./LICENSE).
