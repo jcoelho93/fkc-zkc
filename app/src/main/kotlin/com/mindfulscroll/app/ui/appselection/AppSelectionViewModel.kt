@@ -32,8 +32,13 @@ class AppSelectionViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            // Every row on the list, not just the ones with isMonitored = 1. The picker answers
+            // "which apps are on my list"; the switch in Settings answers "is this one active
+            // right now". Preselecting from the monitored-only set would show a paused app as
+            // unticked, and saving would then delete it and its tuned thresholds - punishing the
+            // user for having paused it.
             val (apps, alreadySelected) = withContext(Dispatchers.IO) {
-                installedAppsProvider.queryLaunchableApps() to monitoredAppRepository.getMonitoredPackageNames()
+                installedAppsProvider.queryLaunchableApps() to monitoredAppRepository.getAllPackageNames()
             }
             val preselected = if (alreadySelected.isNotEmpty()) {
                 alreadySelected
@@ -64,7 +69,7 @@ class AppSelectionViewModel @Inject constructor(
                         addedAtMillis = now,
                     )
                 }
-            monitoredAppRepository.saveSelection(entities)
+            monitoredAppRepository.applySelection(entities)
             onboardingPreferences.hasCompletedAppSelection = true
             onDone()
         }

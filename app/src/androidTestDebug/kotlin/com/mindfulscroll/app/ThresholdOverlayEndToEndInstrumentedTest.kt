@@ -76,22 +76,30 @@ class ThresholdOverlayEndToEndInstrumentedTest {
         // interaction that has no other coverage.
         entryPoint.appSettings().setIntentionCaptureEnabled(true)
         runBlocking {
-            entryPoint.monitoredAppRepository().saveSelection(
+            entryPoint.monitoredAppRepository().applySelection(
                 listOf(
                     MonitoredAppEntity(
                         packageName = monitoredPackage,
                         appLabel = "Settings",
                         isMonitored = true,
-                        // Set absurdly high rather than merely high: Settings fires plenty of
-                        // TYPE_WINDOW_CONTENT_CHANGED events, each of which counts as a scroll
-                        // tick. If scroll count could plausibly reach the limit, a pass would not
-                        // prove the TIME half of the threshold works - and the time half is the
-                        // only one a Compose feed can ever cross.
-                        scrollThreshold = 1_000_000,
-                        timeThresholdMinutes = THRESHOLD_MINUTES,
                         addedAtMillis = System.currentTimeMillis(),
                     ),
                 ),
+            )
+            // Set through updateThresholds rather than in the entity above, because
+            // applySelection deliberately PRESERVES the thresholds of an app already on the list
+            // (#19) - so a row left behind by an earlier run would silently keep its old values
+            // and this test would be measuring a threshold it did not set.
+            //
+            // The scroll threshold is absurdly high rather than merely high: Settings fires
+            // plenty of TYPE_WINDOW_CONTENT_CHANGED events, each of which counts as a scroll
+            // tick. If scroll count could plausibly reach the limit, a pass would not prove the
+            // TIME half of the threshold works - and the time half is the only one a Compose feed
+            // can ever cross.
+            entryPoint.monitoredAppRepository().updateThresholds(
+                packageName = monitoredPackage,
+                scrollThreshold = 1_000_000,
+                timeThresholdMinutes = THRESHOLD_MINUTES,
             )
             // A leftover session row for this package from an earlier test would carry an older
             // sessionStartMillis, and the threshold would appear to cross immediately. That would

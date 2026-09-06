@@ -30,8 +30,14 @@ private val HOME_TABS = listOf(
     HomeTab(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
 )
 
+/**
+ * [onEditMonitoredApps] navigates the OUTER nav host, not this screen's own one. The app picker
+ * is a full-screen task rather than a tab, and hosting it here would nest its Scaffold inside
+ * this one - which applies the status-bar and navigation-bar insets a second time, leaving a gap
+ * under the status bar and the confirm button floating above the tab row.
+ */
 @Composable
-fun MainScreen() {
+fun MainScreen(onEditMonitoredApps: () -> Unit = {}) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -67,7 +73,10 @@ fun MainScreen() {
         ) {
             composable(Routes.DASHBOARD) { DashboardScreen() }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) })
+                SettingsScreen(
+                    onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) },
+                    onEditMonitoredApps = onEditMonitoredApps,
+                )
             }
             composable(Routes.DIAGNOSTICS) {
                 DiagnosticsScreen(onBack = { navController.popBackStack() })
