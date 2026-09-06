@@ -3,10 +3,14 @@ package com.mindfulscroll.app.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import com.mindfulscroll.app.data.AppSettings
+import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.data.entity.OverlayChoice
+import com.mindfulscroll.app.data.repository.IntentionRepository
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import com.mindfulscroll.app.data.repository.ScrollStatsRepository
+import com.mindfulscroll.app.intention.IntentionPromptController
 import com.mindfulscroll.app.overlay.OVERLAY_GRACE_MINUTES
 import com.mindfulscroll.app.overlay.OverlayController
 import com.mindfulscroll.app.overlay.OverlayUiState
@@ -49,6 +53,12 @@ class ScrollMonitorService : AccessibilityService() {
 
     @Inject lateinit var overlayController: OverlayController
 
+    @Inject lateinit var intentionPromptController: IntentionPromptController
+
+    @Inject lateinit var intentionRepository: IntentionRepository
+
+    @Inject lateinit var appSettings: AppSettings
+
     @Inject lateinit var diagnostics: ServiceDiagnostics
 
     private var serviceJob: Job? = null
@@ -63,6 +73,12 @@ class ScrollMonitorService : AccessibilityService() {
     private var isOverlayShowing = false
     private var currentOverlayEventId: Long? = null
     private val graceUntilMillis = mutableMapOf<String, Long>()
+
+    /** Last time the intention prompt was shown per package, for the app-switching debounce. */
+    private val lastIntentionPromptAtMillis = mutableMapOf<String, Long>()
+
+    /** Row id of the prompt currently on screen, so its answer updates the right record. */
+    private var currentIntentionId: Long? = null
 
     /** Guarantees the threshold is checked even if no scroll event ever arrives for this session. */
     private var pendingThresholdCheckJob: Job? = null
@@ -93,6 +109,7 @@ class ScrollMonitorService : AccessibilityService() {
         // TYPE_ACCESSIBILITY_OVERLAY windows are only permitted from this service's own context,
         // so the controller cannot get one by injection - it has to be handed ours while we live.
         overlayController.attach(this)
+        intentionPromptController.attach(this)
 
         diagnostics.log("Service connected")
         diagnostics.log("Resolved serviceInfo: $resolved")
@@ -134,6 +151,24 @@ class ScrollMonitorService : AccessibilityService() {
     private fun handleWindowStateChanged(packageName: String?) {
         if (packageName.isNullOrEmpty() || packageName == currentForegroundPackage) return
 
+        // Our own overlay windows raise TYPE_WINDOW_STATE_CHANGED under THIS package, and without
+        // this guard the service reads that as "the user left the monitored app": it closes the
+        // session, banks the foreground time and resets the threshold clock - triggered by nothing
+        // but us drawing on screen. Harmless for the interruption overlay, which is followed by a
+        // session reset anyway, but fatal for the intention prompt, which appears at the START of
+        // every session and would therefore destroy the very session its answer is filed against.
+        // Scoped to "while one of our windows is up" so genuinely opening Mindful Scroll still
+        // ends the previous app's session normally.
+        if (packageName == this.packageName &&
+            (overlayController.isShowing() || intentionPromptController.isShowing())
+        ) {
+            return
+        }
+
+        // The prompt belongs to the app that was in front; it must not linger over the next one.
+        intentionPromptController.hide()
+        currentIntentionId = null
+
         Log.d(TAG, "Foreground changed: $currentForegroundPackage -> $packageName")
         val now = System.currentTimeMillis()
         val previousPackage = currentForegroundPackage
@@ -156,6 +191,7 @@ class ScrollMonitorService : AccessibilityService() {
                 diagnostics.update {
                     it.copy(activeSessionPackage = packageName, activeSessionScrollCount = 0, activeSessionStartMillis = now)
                 }
+                monitoredApps[packageName]?.let { maybeShowIntentionPrompt(it, sessionStartMillis = now) }
                 scheduleThresholdCheck(packageName)
             }
         }
@@ -182,6 +218,67 @@ class ScrollMonitorService : AccessibilityService() {
             Log.d(TAG, "Scroll #${session.scrollCountInSession} in $packageName via $source")
 
             checkThresholdAndMaybeShowOverlay(packageName)
+        }
+    }
+
+    /**
+     * Shows the "what are you hoping to find?" prompt for an app that has just come forward.
+     *
+     * This runs on every open rather than at a threshold, so everything here is shaped by not
+     * costing the user anything: it never blocks the app (see IntentionPromptController), it is
+     * skipped while the pause screen is up, and it is debounced so flicking between two apps does
+     * not produce a prompt per switch.
+     */
+    private suspend fun maybeShowIntentionPrompt(app: MonitoredAppEntity, sessionStartMillis: Long) {
+        if (!appSettings.intentionCaptureEnabledNow()) return
+        if (isOverlayShowing) return
+
+        val now = System.currentTimeMillis()
+        val lastShown = lastIntentionPromptAtMillis[app.packageName]
+        if (lastShown != null && now - lastShown < INTENTION_PROMPT_DEBOUNCE_MILLIS) {
+            diagnostics.log("Intention prompt skipped for ${app.packageName}: shown ${(now - lastShown) / 1000}s ago")
+            return
+        }
+        lastIntentionPromptAtMillis[app.packageName] = now
+
+        val shown = intentionPromptController.show(
+            appLabel = app.appLabel,
+            onAnswer = { kind, note -> recordIntentionAnswer(app.packageName, kind, note) },
+            onDismiss = {
+                intentionPromptController.hide()
+                currentIntentionId = null
+            },
+        )
+
+        if (!shown) {
+            diagnostics.log(
+                "Intention prompt FAILED to display for ${app.packageName}: " +
+                    "${intentionPromptController.lastFailureReason}",
+            )
+            Log.e(TAG, "Intention prompt failed for ${app.packageName}: ${intentionPromptController.lastFailureReason}")
+            return
+        }
+
+        // Written only AFTER the window is up, so the table never contains a prompt nobody saw.
+        // "Shown and ignored" is a real answer the weekly report needs to count; "never appeared"
+        // is a bug, and mixing the two would quietly corrupt every rate computed from this table.
+        currentIntentionId = intentionRepository.recordPromptShown(app.packageName, sessionStartMillis, now)
+    }
+
+    private fun recordIntentionAnswer(packageName: String, kind: IntentionKind, note: String?) {
+        val intentionId = currentIntentionId
+        intentionPromptController.hide()
+        currentIntentionId = null
+        if (intentionId == null) {
+            // Only reachable if the user out-raced the insert above. Logged rather than ignored:
+            // silently dropping answers would show up as a mysteriously low response rate.
+            diagnostics.log("Intention answer for $packageName arrived before its row existed - dropped")
+            return
+        }
+        serviceScope.launch {
+            intentionRepository.recordAnswer(intentionId, kind, note, System.currentTimeMillis())
+            diagnostics.update { it.copy(intentionsAnsweredCount = it.intentionsAnsweredCount + 1) }
+            diagnostics.log("Intention for $packageName: $kind${note?.let { " ($it)" } ?: ""}")
         }
     }
 
@@ -231,6 +328,10 @@ class ScrollMonitorService : AccessibilityService() {
 
     private suspend fun showOverlay(app: MonitoredAppEntity, scrollCount: Int, sessionElapsedMillis: Long) {
         val now = System.currentTimeMillis()
+        // Two of our windows on screen at once would be absurd, and the prompt asks about an
+        // intention this session has by definition already moved past.
+        intentionPromptController.hide()
+        currentIntentionId = null
         isOverlayShowing = true
         pendingThresholdCheckJob?.cancel()
 
@@ -291,12 +392,14 @@ class ScrollMonitorService : AccessibilityService() {
 
     override fun onInterrupt() {
         overlayController.hide()
+        intentionPromptController.hide()
         isOverlayShowing = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
         overlayController.detach()
+        intentionPromptController.detach()
         pendingThresholdCheckJob?.cancel()
         serviceJob?.cancel()
         diagnostics.update { it.copy(serviceConnectedAtMillis = null) }
@@ -308,5 +411,13 @@ class ScrollMonitorService : AccessibilityService() {
 
         /** Treat scroll events for the same app within this window as one logical swipe. */
         const val SCROLL_DEBOUNCE_MILLIS = 300L
+
+        /**
+         * Suppresses a second prompt for the same app this soon after the last one. Aimed at
+         * app-switching (checking a message and coming straight back), not at real re-opens - long
+         * enough that flicking between two apps doesn't prompt on every hop, short enough that
+         * genuinely returning later still asks.
+         */
+        const val INTENTION_PROMPT_DEBOUNCE_MILLIS = 2 * 60 * 1000L
     }
 }

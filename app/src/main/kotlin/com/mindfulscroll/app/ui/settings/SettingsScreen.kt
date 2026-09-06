@@ -36,12 +36,19 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val apps by viewModel.apps.collectAsState()
+    val intentionCaptureEnabled by viewModel.isIntentionCaptureEnabled.collectAsState()
     var editingApp by remember { mutableStateOf<MonitoredAppEntity?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
     ) {
+        item {
+            IntentionCaptureCard(
+                enabled = intentionCaptureEnabled,
+                onEnabledChange = viewModel::setIntentionCaptureEnabled,
+            )
+        }
         item {
             TextButton(onClick = onOpenDiagnostics) {
                 Text("Diagnostics: is scroll detection actually working?")
@@ -75,6 +82,37 @@ fun SettingsScreen(
                 editingApp = null
             },
         )
+    }
+}
+
+@Composable
+private fun IntentionCaptureCard(enabled: Boolean, onEnabledChange: (Boolean) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ask what I'm looking for", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "A small prompt when you open a monitored app. It never blocks the app - " +
+                            "you can ignore it and keep scrolling.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+            }
+            Text(
+                "Turning this off keeps the pause screen; only the question at opening goes away.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 

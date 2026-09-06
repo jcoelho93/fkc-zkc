@@ -101,9 +101,17 @@ class AccessibilityServiceHarness {
 
     /** @return true if the service connected within [timeoutMillis]. */
     fun enableServiceAndAwaitConnection(timeoutMillis: Long = 30_000): Boolean {
+        // Cleared first so what follows is always a real off -> on transition. Writing a value
+        // that is already set changes nothing, and AccessibilityManagerService can then leave the
+        // service sitting in "Binding services" forever - which surfaces as the maximally
+        // unhelpful "service never connected" 30 seconds later. Whatever ran before this test,
+        // whether another test or someone poking at the device by hand, must not be able to
+        // decide whether this one works.
+        shell("settings put secure accessibility_enabled 0")
+        shell("settings delete secure enabled_accessibility_services")
         // Service list first, master switch last - the write to accessibility_enabled is what
-        // should trigger AccessibilityManagerService to (re)read the service list, so the list
-        // needs to already be correct when that happens.
+        // triggers AccessibilityManagerService to (re)read the service list, so the list needs to
+        // already be correct when that happens.
         shell("settings put secure enabled_accessibility_services $componentName")
         shell("settings put secure accessibility_enabled 1")
         Log.i(
@@ -117,7 +125,10 @@ class AccessibilityServiceHarness {
     }
 
     fun disableService() {
-        shell("settings put secure enabled_accessibility_services ''")
+        // `settings put ... ''` fails outright with "Bad arguments" and silently leaves the
+        // service enabled, so the next run inherits a device that looks configured but isn't.
+        shell("settings delete secure enabled_accessibility_services")
+        shell("settings put secure accessibility_enabled 0")
     }
 
     /**

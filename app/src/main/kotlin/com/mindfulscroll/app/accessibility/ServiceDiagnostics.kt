@@ -63,6 +63,19 @@ data class ServiceDiagnosticsState(
      * rather than left to be inferred.
      */
     val lastOverlayError: String? = null,
+    /**
+     * The intention prompt's own counters, kept separate from the overlay's rather than merged.
+     * The two windows fail for different reasons and at wildly different rates - the prompt fires
+     * on every app open, the overlay only at a threshold - so a single pair of counters would
+     * average away exactly the signal each one is here to give.
+     */
+    val intentionPromptsShownCount: Long = 0,
+    val intentionPromptsRenderedCount: Long = 0,
+    val lastIntentionPromptAddedAtMillis: Long? = null,
+    val lastIntentionPromptRender: String? = null,
+    val lastIntentionPromptError: String? = null,
+    /** Prompts the user actually answered, as opposed to ignored - the two are both worth knowing. */
+    val intentionsAnsweredCount: Long = 0,
     /** Newest first, capped - enough to see what just happened without adb. */
     val recentLog: List<String> = emptyList(),
 ) {

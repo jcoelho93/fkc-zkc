@@ -5,10 +5,12 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.mindfulscroll.app.data.dao.ActiveSessionDao
 import com.mindfulscroll.app.data.dao.DailyAppStatDao
+import com.mindfulscroll.app.data.dao.IntentionDao
 import com.mindfulscroll.app.data.dao.MonitoredAppDao
 import com.mindfulscroll.app.data.dao.OverlayEventDao
 import com.mindfulscroll.app.data.entity.ActiveSessionEntity
 import com.mindfulscroll.app.data.entity.DailyAppStatEntity
+import com.mindfulscroll.app.data.entity.IntentionEntity
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.data.entity.OverlayEventEntity
 
@@ -18,10 +20,13 @@ import com.mindfulscroll.app.data.entity.OverlayEventEntity
         DailyAppStatEntity::class,
         ActiveSessionEntity::class,
         OverlayEventEntity::class,
+        IntentionEntity::class,
     ],
-    version = 1,
-    // No migrations exist yet at v1; schema export can be turned on once one is needed.
-    exportSchema = false,
+    version = 2,
+    // Turned on with the first real migration (1 -> 2, intention capture). The exported JSON in
+    // app/schemas is what lets a future migration be tested against the schema it actually
+    // starts from, rather than against one written from memory.
+    exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun dailyAppStatDao(): DailyAppStatDao
     abstract fun activeSessionDao(): ActiveSessionDao
     abstract fun overlayEventDao(): OverlayEventDao
+    abstract fun intentionDao(): IntentionDao
 
     companion object {
         const val DATABASE_NAME = "mindful_scroll.db"
