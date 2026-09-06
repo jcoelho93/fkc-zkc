@@ -7,6 +7,7 @@ import com.mindfulscroll.app.data.AppSettings
 import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.data.entity.OverlayChoice
+import com.mindfulscroll.app.data.entity.PauseOutcome
 import com.mindfulscroll.app.data.repository.IntentionRepository
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import com.mindfulscroll.app.data.repository.ScrollStatsRepository
@@ -328,7 +329,12 @@ class ScrollMonitorService : AccessibilityService() {
             graceUntilMillis.remove(packageName)
             diagnostics.log("Threshold crossed for $packageName (reasons=${result.reasons}, graceExpired=$graceExpired) - showing overlay")
             Log.d(TAG, "Threshold crossed for $packageName: reasons=${result.reasons} graceExpired=$graceExpired")
-            showOverlay(config, session.scrollCountInSession, now - session.sessionStartMillis)
+            showOverlay(
+                app = config,
+                scrollCount = session.scrollCountInSession,
+                sessionElapsedMillis = now - session.sessionStartMillis,
+                sessionStartMillis = session.sessionStartMillis,
+            )
         }
     }
 
@@ -354,7 +360,12 @@ class ScrollMonitorService : AccessibilityService() {
         pendingThresholdCheckJob = null
     }
 
-    private suspend fun showOverlay(app: MonitoredAppEntity, scrollCount: Int, sessionElapsedMillis: Long) {
+    private suspend fun showOverlay(
+        app: MonitoredAppEntity,
+        scrollCount: Int,
+        sessionElapsedMillis: Long,
+        sessionStartMillis: Long,
+    ) {
         val now = System.currentTimeMillis()
         // Two of our windows on screen at once would be absurd, and the prompt asks about an
         // intention this session has by definition already moved past.
@@ -363,11 +374,23 @@ class ScrollMonitorService : AccessibilityService() {
         isOverlayShowing = true
         cancelPendingThresholdCheckUnlessItIsUs()
 
+        // The intention for THIS visit, matched on the session's own start time - not the most
+        // recent one for the app, which could be from an hour ago. Null is an ordinary case, not
+        // an error: capture may be switched off, or the prompt debounced away, and the pause has
+        // to work without it. Nothing here fails if it is missing; the screen just does not ask.
+        val intention = intentionRepository.getForSession(app.packageName, sessionStartMillis)
+        if (intention == null) {
+            diagnostics.log("No intention recorded for this ${app.packageName} session - pause will skip the recall")
+        }
+
         val shown = overlayController.show(
             state = OverlayUiState(
                 appLabel = app.appLabel,
                 scrollCount = scrollCount,
                 sessionMinutes = (sessionElapsedMillis / 60_000L).toInt(),
+                intentionKind = intention?.kind,
+                intentionNote = intention?.note,
+                pauseDurationSeconds = appSettings.pauseDurationSecondsNow(),
             ),
             onCloseApp = {
                 serviceScope.launch { resolveOverlay(app.packageName, OverlayChoice.CLOSE_APP) }
@@ -376,6 +399,7 @@ class ScrollMonitorService : AccessibilityService() {
             onContinue = {
                 serviceScope.launch { resolveOverlay(app.packageName, OverlayChoice.CONTINUE) }
             },
+            onOutcome = { outcome -> recordOutcome(app.packageName, outcome) },
         )
 
         if (!shown) {
@@ -397,7 +421,28 @@ class ScrollMonitorService : AccessibilityService() {
             nowMillis = now,
             scrollCountAtTrigger = scrollCount,
             sessionTimeMillisAtTrigger = sessionElapsedMillis,
+            intentionId = intention?.id,
+            intentionKind = intention?.kind,
         )
+    }
+
+    /**
+     * Written as soon as the chip is tapped, without waiting for the user to then pick an exit.
+     * "Not really" followed by walking away is a perfectly ordinary thing to do, and it is also
+     * one of the most informative rows the weekly report can have - losing it because no exit was
+     * ever chosen would bias the outcome data towards the pauses people finished tidily.
+     */
+    private fun recordOutcome(packageName: String, outcome: PauseOutcome) {
+        val eventId = currentOverlayEventId
+        if (eventId == null) {
+            diagnostics.log("Outcome $outcome for $packageName arrived with no overlay event row - dropped")
+            return
+        }
+        serviceScope.launch {
+            scrollStatsRepository.recordOverlayOutcome(eventId, outcome)
+            diagnostics.update { it.copy(pauseOutcomesAnsweredCount = it.pauseOutcomesAnsweredCount + 1) }
+            diagnostics.log("Pause outcome for $packageName: $outcome")
+        }
     }
 
     private suspend fun resolveOverlay(packageName: String, choice: OverlayChoice) {

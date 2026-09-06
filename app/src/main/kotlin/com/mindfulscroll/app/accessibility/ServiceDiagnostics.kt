@@ -87,6 +87,12 @@ data class ServiceDiagnosticsState(
     val lastIntentionPromptError: String? = null,
     /** Prompts the user actually answered, as opposed to ignored - the two are both worth knowing. */
     val intentionsAnsweredCount: Long = 0,
+    /**
+     * Outcome chips tapped on the pause screen. Counted separately from [intentionsAnsweredCount]
+     * because the two questions are asked at different moments to different degrees of willing
+     * user, and a single number would hide which half people actually engage with.
+     */
+    val pauseOutcomesAnsweredCount: Long = 0,
     /** Newest first, capped - enough to see what just happened without adb. */
     val recentLog: List<String> = emptyList(),
 ) {

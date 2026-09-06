@@ -12,6 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.mindfulscroll.app.data.AppSettings
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 
 @Composable
@@ -36,6 +38,7 @@ fun SettingsScreen(
 ) {
     val apps by viewModel.apps.collectAsState()
     val intentionCaptureEnabled by viewModel.isIntentionCaptureEnabled.collectAsState()
+    val pauseDurationSeconds by viewModel.pauseDurationSeconds.collectAsState()
     var editingApp by remember { mutableStateOf<MonitoredAppEntity?>(null) }
 
     LazyColumn(
@@ -46,6 +49,12 @@ fun SettingsScreen(
             IntentionCaptureCard(
                 enabled = intentionCaptureEnabled,
                 onEnabledChange = viewModel::setIntentionCaptureEnabled,
+            )
+        }
+        item {
+            PauseDurationCard(
+                seconds = pauseDurationSeconds,
+                onSecondsChange = viewModel::setPauseDurationSeconds,
             )
         }
         item {
@@ -85,6 +94,47 @@ fun SettingsScreen(
                 editingApp = null
             },
         )
+    }
+}
+
+/**
+ * How long the pause screen's breathing phase runs before it asks whether you got what you came
+ * for. A slider rather than a text field because there is no wrong answer here to validate, and no
+ * reason to make anyone type a number.
+ *
+ * The copy is careful to say what this is NOT: it does not lock the screen. Someone reading
+ * "pause length" would reasonably assume it is how long they are held there, which is exactly the
+ * countdown this app removed - and they would then set it to the minimum for the wrong reason.
+ */
+@Composable
+private fun PauseDurationCard(seconds: Int, onSecondsChange: (Int) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Pause length", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "$seconds seconds of breathing before the pause screen asks whether you got what " +
+                    "you came for.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Both buttons stay available the whole time - this never locks you out.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Slider(
+                value = seconds.toFloat(),
+                onValueChange = { onSecondsChange(it.toInt()) },
+                valueRange = AppSettings.MIN_PAUSE_DURATION_SECONDS.toFloat()..
+                    AppSettings.MAX_PAUSE_DURATION_SECONDS.toFloat(),
+                // One step per 5s: fine enough to tune, coarse enough to land on a round number.
+                steps = (AppSettings.MAX_PAUSE_DURATION_SECONDS - AppSettings.MIN_PAUSE_DURATION_SECONDS) / 5 - 1,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 

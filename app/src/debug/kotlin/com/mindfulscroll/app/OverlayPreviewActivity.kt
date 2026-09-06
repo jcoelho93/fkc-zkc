@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.intention.IntentionPromptScreen
+import com.mindfulscroll.app.overlay.InterruptionOverlayScreen
+import com.mindfulscroll.app.overlay.OverlayUiState
 import com.mindfulscroll.app.ui.theme.MindfulScrollTheme
 
 /**
@@ -36,15 +39,43 @@ class OverlayPreviewActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Bottom,
-                    ) {
-                        IntentionPromptScreen(
-                            appLabel = "Instagram",
-                            onAnswer = { _, _ -> },
-                            onDismiss = {},
-                            onRequestTextEntry = {},
+                    // Which UI to preview, chosen with:
+                    //   adb shell am start -n com.mindfulscroll.app.debug/\
+                    //     com.mindfulscroll.app.OverlayPreviewActivity --es screen pause
+                    // Defaults to the pause screen, which is the one with real layout to review.
+                    when (intent?.getStringExtra("screen")) {
+                        "prompt" -> Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Bottom,
+                        ) {
+                            IntentionPromptScreen(
+                                appLabel = "Instagram",
+                                onAnswer = { _, _ -> },
+                                onDismiss = {},
+                                onRequestTextEntry = {},
+                            )
+                        }
+                        else -> InterruptionOverlayScreen(
+                            state = OverlayUiState(
+                                appLabel = "Instagram",
+                                scrollCount = 63,
+                                sessionMinutes = 11,
+                                // "none" previews the degraded path - no intention for this
+                                // session, so no recall. Distinguished from an absent extra on
+                                // purpose: falling back to a default here would make the one
+                                // state worth eyeballing impossible to reach.
+                                intentionKind = when (val kind = intent?.getStringExtra("intention")) {
+                                    null -> IntentionKind.CONNECTION
+                                    "none" -> null
+                                    else -> IntentionKind.valueOf(kind)
+                                },
+                                // Zero so the recall is on screen immediately; the real screen
+                                // waits out AppSettings.pauseDurationSeconds first.
+                                pauseDurationSeconds = intent?.getIntExtra("pauseSeconds", 0) ?: 0,
+                            ),
+                            onCloseApp = {},
+                            onContinue = {},
+                            onOutcome = {},
                         )
                     }
                 }

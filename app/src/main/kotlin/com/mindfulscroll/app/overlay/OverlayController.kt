@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.view.WindowManager
 import com.mindfulscroll.app.accessibility.ServiceDiagnostics
+import com.mindfulscroll.app.data.entity.PauseOutcome
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -72,6 +73,7 @@ class OverlayController @Inject constructor(
         state: OverlayUiState,
         onCloseApp: () -> Unit,
         onContinue: () -> Unit,
+        onOutcome: (PauseOutcome) -> Unit = {},
     ): Boolean = window.show(
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -90,6 +92,7 @@ class OverlayController @Inject constructor(
             state = state,
             onCloseApp = onCloseApp,
             onContinue = onContinue,
+            onOutcome = onOutcome,
         )
     }
 

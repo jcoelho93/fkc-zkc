@@ -6,7 +6,9 @@ import com.mindfulscroll.app.data.dao.OverlayEventDao
 import com.mindfulscroll.app.data.entity.ActiveSessionEntity
 import com.mindfulscroll.app.data.entity.DailyAppStatEntity
 import com.mindfulscroll.app.data.entity.OverlayChoice
+import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.OverlayEventEntity
+import com.mindfulscroll.app.data.entity.PauseOutcome
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.ZoneId
@@ -78,6 +80,8 @@ class ScrollStatsRepository @Inject constructor(
         nowMillis: Long,
         scrollCountAtTrigger: Int,
         sessionTimeMillisAtTrigger: Long,
+        intentionId: Long?,
+        intentionKind: IntentionKind?,
     ): Long = overlayEventDao.insert(
         OverlayEventEntity(
             packageName = packageName,
@@ -87,8 +91,22 @@ class ScrollStatsRepository @Inject constructor(
             sessionTimeMillisAtTrigger = sessionTimeMillisAtTrigger,
             choice = OverlayChoice.PENDING,
             respondedAtMillis = null,
+            intentionId = intentionId,
+            intentionKind = intentionKind,
+            outcome = null,
         ),
     )
+
+    /**
+     * Written the moment the user taps an outcome chip, separately from the choice, because the
+     * two are genuinely separate events: someone can answer "not really" and still keep scrolling,
+     * and that combination is the most interesting row the weekly report will ever see. Waiting to
+     * write both together would lose the answer entirely if they then walked away.
+     */
+    suspend fun recordOverlayOutcome(eventId: Long, outcome: PauseOutcome) {
+        val event = overlayEventDao.get(eventId) ?: return
+        overlayEventDao.update(event.copy(outcome = outcome))
+    }
 
     suspend fun recordOverlayChoice(eventId: Long, choice: OverlayChoice, nowMillis: Long) {
         val event = overlayEventDao.get(eventId) ?: return
