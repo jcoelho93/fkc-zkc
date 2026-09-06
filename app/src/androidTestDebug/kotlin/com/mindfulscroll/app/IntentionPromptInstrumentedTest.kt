@@ -2,6 +2,7 @@ package com.mindfulscroll.app
 
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
@@ -156,6 +157,92 @@ class IntentionPromptInstrumentedTest {
                 "Log: ${harness.diagnostics.state.value.recentLog}",
             false,
             appeared,
+        )
+    }
+
+    /**
+     * The regression guard for the free-text path, which had no coverage at all - which is
+     * precisely how the bug it covers got in.
+     *
+     * Tapping "Checking something specific" makes the window focusable so the keyboard can open.
+     * That same tap used to CANCEL the dismiss timer rather than restart it, so a prompt the user
+     * then walked away from stayed on screen forever, holding keyboard focus away from the app
+     * underneath. On the one path where the user was being more deliberate, not less.
+     *
+     * Asserts both halves: that the window really does become focusable (otherwise the free-text
+     * path is silently broken), and that it still takes itself down afterwards.
+     */
+    @Test
+    fun abandonedFreeTextPromptStillDismissesItself() {
+        assertTrue("service never connected", harness.enableServiceAndAwaitConnection())
+        assertTrue(
+            "service never picked up the monitored list",
+            harness.pollUntil(10_000, "monitored-list") {
+                monitoredPackage in harness.diagnostics.state.value.monitoredPackages
+            },
+        )
+
+        // From the debug-only entry point, not DiagnosticsEntryPoint: that one lives in `main` so
+        // the release variant can be instrumented, and everything it exposes has to earn an R8
+        // keep rule. This test is debug-only, so it should not widen that surface.
+        val prompt = EntryPointAccessors.fromApplication(
+            harness.targetContext.applicationContext,
+            TestRepositoryEntryPoint::class.java,
+        ).intentionPromptController()
+
+        val renderedBefore = harness.diagnostics.state.value.intentionPromptsRenderedCount
+        var added = false
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            added = prompt.show(
+                appLabel = "Test app",
+                onAnswer = { _, _ -> },
+                onDismiss = { prompt.hide() },
+                // Long enough that the untouched timer cannot be what dismisses this, short enough
+                // that the engaged one can be waited out in a test.
+                idleDismissMillis = 60_000L,
+                engagedIdleDismissMillis = 4_000L,
+            )
+        }
+        assertTrue("prompt window was not added: ${prompt.lastFailureReason}", added)
+        assertTrue(
+            "prompt never drew a frame",
+            harness.pollUntil(10_000, "prompt-render") {
+                harness.diagnostics.state.value.intentionPromptsRenderedCount > renderedBefore
+            },
+        )
+
+        val flagsBefore = harness.ourWindowAttrs()
+        Log.i(TAG, "window attrs before tapping the free-text chip: $flagsBefore")
+        assertTrue(
+            "The prompt must start NOT_FOCUSABLE - it appears on every app open and must never " +
+                "take input away from the app underneath. WindowManager reported: $flagsBefore",
+            flagsBefore.contains("NOT_FOCUSABLE"),
+        )
+
+        assertTrue(
+            "Could not find the free-text chip to tap. Windows and node texts actually visible:\n" +
+                harness.describeWindowsAndTexts(),
+            harness.tapNodeWithText("Checking something specific"),
+        )
+
+        val becameFocusable = harness.pollUntil(5_000, "window-focusable") {
+            !harness.ourWindowAttrs().contains("NOT_FOCUSABLE")
+        }
+        assertTrue(
+            "Tapping the free-text chip did not make the window focusable, so the keyboard could " +
+                "never open and the free-text path is broken. Attrs: ${harness.ourWindowAttrs()}",
+            becameFocusable,
+        )
+
+        // The actual regression: engaging must RESTART the dismiss timer, never remove it.
+        val dismissed = harness.pollUntil(20_000, "engaged-auto-dismiss") {
+            !prompt.isShowing()
+        }
+        assertTrue(
+            "The prompt was engaged and then abandoned, and never took itself down. It is holding " +
+                "keyboard focus away from the app underneath with no timeout left to remove it. " +
+                "Attrs: ${harness.ourWindowAttrs()}",
+            dismissed,
         )
     }
 

@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -52,8 +53,17 @@ private val CHIP_LABELS = listOf(
 /** How long before the dismiss button appears - see the note in IntentionPromptController. */
 private const val DISMISS_ENABLED_AFTER_MILLIS = 2_000L
 
-/** Safety net so an ignored prompt doesn't sit on screen forever. Cancelled by any interaction. */
-private const val AUTO_DISMISS_AFTER_MILLIS = 15_000L
+/** How long an untouched prompt stays before removing itself. */
+internal const val IDLE_DISMISS_MILLIS = 15_000L
+
+/**
+ * How long an ENGAGED prompt tolerates inactivity. Longer than [IDLE_DISMISS_MILLIS] because the
+ * user is mid-thought and may be typing, but deliberately finite: the free-text path makes the
+ * window focusable, so a prompt with no timeout does not merely linger, it keeps the keyboard
+ * away from the app underneath until it is answered. Reset by every further interaction, so it
+ * only ever expires after real inactivity.
+ */
+internal const val ENGAGED_IDLE_DISMISS_MILLIS = 45_000L
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -62,25 +72,33 @@ fun IntentionPromptScreen(
     onAnswer: (IntentionKind, String?) -> Unit,
     onDismiss: () -> Unit,
     onRequestTextEntry: () -> Unit,
+    idleDismissMillis: Long = IDLE_DISMISS_MILLIS,
+    engagedIdleDismissMillis: Long = ENGAGED_IDLE_DISMISS_MILLIS,
 ) {
     var canDismiss by remember { mutableStateOf(false) }
-    var interacted by remember { mutableStateOf(false) }
     var showNote by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     var pendingKind by remember { mutableStateOf<IntentionKind?>(null) }
+
+    /** Bumped by every interaction; restarts the dismiss timer below rather than cancelling it. */
+    var interactions by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         delay(DISMISS_ENABLED_AFTER_MILLIS)
         canDismiss = true
     }
 
-    // Only ever dismisses a prompt the user never touched. Once they have engaged - a chip, the
-    // note field - taking the prompt away mid-thought would be worse than leaving it up.
-    LaunchedEffect(interacted) {
-        if (!interacted) {
-            delay(AUTO_DISMISS_AFTER_MILLIS)
-            onDismiss()
-        }
+    // There is ALWAYS a timeout running. Engaging with the prompt lengthens it and restarts it;
+    // engaging never removes it.
+    //
+    // Removing it is what this used to do, and it was a real bug: tapping "Checking something
+    // specific" makes the window focusable so the keyboard can open, and with no timeout left, a
+    // prompt the user then abandoned sat there indefinitely holding keyboard focus away from the
+    // app underneath. For a feature whose whole premise is costing the user nothing, on the one
+    // path where they were trying to be more thoughtful, that was the worst available outcome.
+    LaunchedEffect(interactions) {
+        delay(if (interactions == 0) idleDismissMillis else engagedIdleDismissMillis)
+        onDismiss()
     }
 
     MindfulScrollTheme {
@@ -121,7 +139,7 @@ fun IntentionPromptScreen(
                     CHIP_LABELS.forEach { (kind, label) ->
                         SuggestionChip(
                             onClick = {
-                                interacted = true
+                                interactions++
                                 if (kind == IntentionKind.SOMETHING_SPECIFIC) {
                                     // The only path that needs the keyboard, so it is also the only
                                     // path that takes focus away from the app underneath.
@@ -142,7 +160,7 @@ fun IntentionPromptScreen(
                     OutlinedTextField(
                         value = note,
                         onValueChange = {
-                            interacted = true
+                            interactions++
                             note = it
                         },
                         label = { Text("What are you checking? (optional)") },
