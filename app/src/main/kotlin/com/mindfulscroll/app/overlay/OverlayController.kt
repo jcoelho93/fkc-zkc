@@ -77,10 +77,12 @@ class OverlayController @Inject constructor(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            0, // No FLAG_NOT_FOCUSABLE: the overlay must be able to intercept touches and keyboard
-            // input (needed for the typed-phrase friction mode) and must fully block interaction
-            // with the app underneath - that's the point of it. This is the opposite of the
-            // intention prompt, which must never take input away from the app.
+            0, // No FLAG_NOT_FOCUSABLE: the overlay must intercept touches and fully block
+            // interaction with the app underneath - that's the point of it. This is the opposite
+            // of the intention prompt, which must never take input away from the app. It also
+            // kept the keyboard reachable for the typed-phrase gate; that gate is gone (#3), but
+            // the flag is unchanged because focusability is what blocks the app underneath, not
+            // a detail of the removed content.
             PixelFormat.TRANSLUCENT,
         ),
     ) {

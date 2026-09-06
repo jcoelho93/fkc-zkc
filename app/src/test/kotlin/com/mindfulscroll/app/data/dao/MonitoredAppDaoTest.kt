@@ -5,7 +5,6 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import com.mindfulscroll.app.data.AppDatabase
-import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -47,7 +46,6 @@ class MonitoredAppDaoTest {
         isMonitored = monitored,
         scrollThreshold = scrollThreshold,
         timeThresholdMinutes = timeThresholdMinutes,
-        frictionMode = FrictionMode.COUNTDOWN,
         addedAtMillis = 0L,
     )
 
@@ -60,7 +58,6 @@ class MonitoredAppDaoTest {
         assertThat(loaded).isNotNull()
         assertThat(loaded!!.scrollThreshold).isEqualTo(25)
         assertThat(loaded.timeThresholdMinutes).isEqualTo(7)
-        assertThat(loaded.frictionMode).isEqualTo(FrictionMode.COUNTDOWN)
     }
 
     @Test
@@ -92,11 +89,11 @@ class MonitoredAppDaoTest {
         dao.upsertAll(listOf(app("com.instagram.android"), app("com.reddit.frontpage")))
         val instagram = dao.get("com.instagram.android")!!
 
-        dao.update(instagram.copy(scrollThreshold = 100, frictionMode = FrictionMode.TYPED_PHRASE))
+        dao.update(instagram.copy(scrollThreshold = 100, timeThresholdMinutes = 25))
 
         val updated = dao.get("com.instagram.android")!!
         assertThat(updated.scrollThreshold).isEqualTo(100)
-        assertThat(updated.frictionMode).isEqualTo(FrictionMode.TYPED_PHRASE)
+        assertThat(updated.timeThresholdMinutes).isEqualTo(25)
         assertThat(dao.get("com.reddit.frontpage")!!.scrollThreshold).isEqualTo(40)
     }
 

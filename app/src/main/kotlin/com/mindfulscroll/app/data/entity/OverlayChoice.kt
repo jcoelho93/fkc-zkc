@@ -8,6 +8,6 @@ enum class OverlayChoice {
     /** User tapped "Close app" (we sent GLOBAL_ACTION_HOME). */
     CLOSE_APP,
 
-    /** User completed the friction step and chose "5 more minutes". */
+    /** User chose "5 more minutes" and stayed in the app. */
     CONTINUE,
 }

@@ -1,7 +1,6 @@
 package com.mindfulscroll.app.data.repository
 
 import com.mindfulscroll.app.data.dao.MonitoredAppDao
-import com.mindfulscroll.app.data.entity.FrictionMode
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -42,10 +41,5 @@ class MonitoredAppRepository @Inject constructor(
                 timeThresholdMinutes = timeThresholdMinutes,
             ),
         )
-    }
-
-    suspend fun updateFrictionMode(packageName: String, mode: FrictionMode) {
-        val existing = dao.get(packageName) ?: return
-        dao.update(existing.copy(frictionMode = mode))
     }
 }
