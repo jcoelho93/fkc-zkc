@@ -34,6 +34,19 @@ jobs:
       - name: Unit tests
         run: ./gradlew test
 
+      # R8's own account of what it kept, renamed and removed from the release build.
+      # usage.txt is the direct answer to "did minification strip this class?", which is the
+      # question every silent release-only failure on this project has eventually come down to;
+      # having it archived means answering it doesn't need a rerun.
+      - name: Upload R8 mapping and usage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-release-mapping
+          path: app/build/outputs/mapping/release
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

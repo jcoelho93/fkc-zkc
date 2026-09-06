@@ -256,16 +256,14 @@ class ScrollMonitorService : AccessibilityService() {
             // single failed overlay would silently stop all scroll counting until the service
             // restarted - a much worse symptom than the missing overlay itself.
             isOverlayShowing = false
+            // The controller has already recorded the reason itself - it owns the window, so it
+            // owns the facts about it. What it cannot know is which app this was for.
             val reason = overlayController.lastFailureReason
-            diagnostics.update { it.copy(lastOverlayError = reason) }
             diagnostics.log("Overlay FAILED to display for ${app.packageName}: $reason")
             Log.e(TAG, "Overlay failed to display for ${app.packageName}: $reason")
             return
         }
 
-        diagnostics.update {
-            it.copy(overlaysShownCount = it.overlaysShownCount + 1, lastOverlayError = null)
-        }
         currentOverlayEventId = scrollStatsRepository.recordOverlayShown(
             packageName = app.packageName,
             nowMillis = now,

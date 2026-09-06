@@ -107,6 +107,40 @@ for that specific app; if the raw counters climb but nothing gets
 counted, the foreground-matching logic is the problem instead. The same
 detail is also logged to Logcat under the tag `MindfulScroll`.
 
+The overlay is reported as two separate numbers - **overlay windows
+added** and **overlay windows actually drawn** - because those answer
+different questions. "Added" only means `WindowManager.addView()` returned
+without throwing; the window can still be accepted and then never laid
+out, sized 0x0, or never composed, in which case nothing appears and every
+other counter still reads like success. "Drawn" means the window produced
+a real, non-zero-sized frame, which is the only evidence the pause screen
+was on screen. If those two diverge, **last overlay render** says what the
+window did instead - `OverlayController` gives each window two seconds to
+produce a frame and writes its own complaint there if none arrives.
+
+### Verifying a release build
+
+The instrumented suite runs on an emulator against **both** the debug and
+the release (R8-minified) variant on every push
+(`.github/workflows/instrumented-tests.yml`). That matters because the two
+things most likely to break silently here are runtime facts about the
+shipped artifact that no static check of the APK can answer: the event
+type mask `AccessibilityManagerService` resolves for the service (asserted
+to be exactly `typeViewScrolled|typeWindowContentChanged|typeWindowStateChanged`,
+because a partially-resolved mask fails just as quietly as an empty one),
+and whether the `TYPE_ACCESSIBILITY_OVERLAY` window still draws. R8's own
+account of what it kept and removed is archived as the `r8-release-mapping`
+CI artifact. The keep rules in `app/proguard-rules.pro` each name the
+specific thing that breaks without them.
+
+To run the release variant locally:
+
+```
+./gradlew connectedReleaseAndroidTest \
+    -Pmindfulscroll.testBuildType=release \
+    -Pmindfulscroll.signReleaseWithDebugKey=true
+```
+
 ## Privacy & permissions
 
 Mindful Scroll requests no network permission of any kind - it is

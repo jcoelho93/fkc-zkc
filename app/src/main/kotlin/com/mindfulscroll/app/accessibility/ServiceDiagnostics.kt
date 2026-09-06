@@ -39,8 +39,24 @@ data class ServiceDiagnosticsState(
     val activeSessionPackage: String? = null,
     val activeSessionScrollCount: Int = 0,
     val activeSessionStartMillis: Long? = null,
-    /** Overlay windows that were actually added - not merely attempted. */
+    /** Overlay windows that WindowManager accepted - not merely attempted, and not necessarily seen. */
     val overlaysShownCount: Long = 0,
+    /**
+     * Overlay windows that went on to draw a real, non-zero-sized frame. This is the number
+     * that means "the user saw something"; [overlaysShownCount] only means addView() returned
+     * without throwing. When these two diverge, the window is being created and then lost
+     * somewhere between WindowManager and the screen - a failure that reads as success in
+     * every other counter here.
+     */
+    val overlaysRenderedCount: Long = 0,
+    /** When the last overlay window was handed to WindowManager, for pairing with [lastOverlayRender]. */
+    val lastOverlayAddedAtMillis: Long? = null,
+    /**
+     * What the last overlay window actually did after being added: its first-draw size and
+     * latency, the render watchdog's complaint that no frame ever arrived, or null while an
+     * attempt is still in flight.
+     */
+    val lastOverlayRender: String? = null,
     /**
      * Why the last overlay attempt failed, or null if the last one worked. An overlay that fails
      * to display looks exactly like a threshold that never fired, so the reason is recorded
