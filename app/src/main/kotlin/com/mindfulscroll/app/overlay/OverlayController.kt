@@ -139,8 +139,18 @@ class OverlayController @Inject constructor(
                 onSuccess = {
                     lastFailureReason = null
                     lastRenderDescription = null
+                    // Counted here, not by the caller. "Added" and "drawn" are meant to be read
+                    // against each other on the Diagnostics screen, and two counters describing
+                    // one window can only be compared if one class owns both - otherwise a caller
+                    // that goes straight to the controller makes "drawn" exceed "added", which
+                    // reads as impossible rather than as the anomaly it is.
                     diagnostics.update {
-                        it.copy(lastOverlayAddedAtMillis = addedAtMillis, lastOverlayRender = null)
+                        it.copy(
+                            overlaysShownCount = it.overlaysShownCount + 1,
+                            lastOverlayAddedAtMillis = addedAtMillis,
+                            lastOverlayRender = null,
+                            lastOverlayError = null,
+                        )
                     }
                     watchForFirstDraw(view, addedAtMillis)
                     true
@@ -149,6 +159,7 @@ class OverlayController @Inject constructor(
                     // Never swallow this. A silently-failing overlay is indistinguishable from a
                     // threshold that never fired, and the two have completely different fixes.
                     lastFailureReason = "${error.javaClass.simpleName}: ${error.message}"
+                    diagnostics.update { it.copy(lastOverlayError = lastFailureReason) }
                     Log.e(TAG, "Failed to add TYPE_ACCESSIBILITY_OVERLAY window", error)
                     composeView = null
                     lifecycleOwner?.onDestroy()
