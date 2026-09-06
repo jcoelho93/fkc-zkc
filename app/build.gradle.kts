@@ -158,12 +158,28 @@ android {
             // anything from src/debug. Debug-only instrumented tests go in androidTestDebug.
             kotlin.srcDirs("src/androidTest/kotlin")
         }
+        getByName("androidTest") {
+            // Room's exported schemas, so MigrationTestHelper can open a database at the OLD
+            // version and migrate it forward for real, instead of against a schema written from
+            // memory. Both variants get them; only androidTestDebug actually reads them.
+            assets.srcDirs("$projectDir/schemas")
+        }
         getByName("androidTestDebug") {
-            // Tests that depend on debug-only components (ScrollProbeActivity) and so cannot run
-            // against the release variant.
+            // Tests that depend on debug-only components (ScrollProbeActivity), or that have no
+            // reason to run twice - the migration is plain SQL and cannot differ by variant, so
+            // keeping it here also keeps room-testing out of the minified release test apk.
             kotlin.srcDirs("src/androidTestDebug/kotlin")
         }
     }
+}
+
+/**
+ * Room writes the schema of every version here so migrations can be tested against the schema
+ * they actually start from. Committed to git deliberately - a migration validated against a
+ * schema reconstructed from memory proves nothing, and this app's database is on real phones.
+ */
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -222,4 +238,5 @@ dependencies {
     // androidTest APK, and scoping it to androidTestDebugImplementation would mean depending on a
     // configuration AGP has no reason to create when testBuildType is release.
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation(libs.room.testing)
 }

@@ -138,6 +138,23 @@ fun DiagnosticsScreen(
             }
 
             item {
+                DiagnosticsCard(title = "Intention prompt (on app open)") {
+                    LabelValueRow("Prompt windows added", state.intentionPromptsShownCount.toString())
+                    LabelValueRow("Prompt windows actually drawn", state.intentionPromptsRenderedCount.toString())
+                    LabelValueRow("Prompts answered", state.intentionsAnsweredCount.toString())
+                    LabelValueRow("Last prompt render", state.lastIntentionPromptRender ?: "(no prompt attempted yet)")
+                    LabelValueRow("Last prompt error", state.lastIntentionPromptError ?: "(none)")
+                    Text(
+                        "Answered being far below drawn is not a fault - the prompt is meant to be " +
+                            "ignorable, and \"opened it with nothing in mind\" is recorded too. Drawn " +
+                            "staying below added is the number that means something is broken.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+
+            item {
                 DiagnosticsCard(title = "Active session") {
                     LabelValueRow("Package", state.activeSessionPackage ?: "(none)")
                     LabelValueRow("Scroll count", state.activeSessionScrollCount.toString())

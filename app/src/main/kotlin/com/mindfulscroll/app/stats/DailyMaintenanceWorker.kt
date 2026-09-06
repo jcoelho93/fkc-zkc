@@ -4,14 +4,16 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.mindfulscroll.app.data.repository.IntentionRepository
 import com.mindfulscroll.app.data.repository.ScrollStatsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
 /**
  * Runs roughly once a day: clears any per-app "active session" row that never got cleared
- * (e.g. the accessibility service's process was killed mid-session) and prunes daily stats /
- * overlay-event history past the local retention window, so on-device storage stays bounded.
+ * (e.g. the accessibility service's process was killed mid-session) and prunes daily stats,
+ * overlay-event and intention history past the local retention window, so on-device storage
+ * stays bounded.
  * There is no server-side rollup - this is purely local housekeeping.
  */
 @HiltWorker
@@ -19,12 +21,16 @@ class DailyMaintenanceWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val scrollStatsRepository: ScrollStatsRepository,
+    private val intentionRepository: IntentionRepository,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
         val now = System.currentTimeMillis()
         scrollStatsRepository.clearStaleSessions(maxAgeMillis = STALE_SESSION_MAX_AGE_MILLIS, nowMillis = now)
         scrollStatsRepository.pruneHistoryOlderThan(retentionDays = HISTORY_RETENTION_DAYS, nowMillis = now)
+        // Intentions are pruned on the same schedule and window as everything else, so the
+        // on-device history cannot grow a table that nothing ever cleans up.
+        intentionRepository.pruneOlderThan(retentionDays = HISTORY_RETENTION_DAYS, nowMillis = now)
         return Result.success()
     }
 

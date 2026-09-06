@@ -13,5 +13,14 @@
         <activity
             android:name=".ScrollProbeActivity"
             android:exported="false" />
+
+        <!--
+          Exported so it can be launched with `adb shell am start` for a visual check of the
+          overlay UIs, which screencap cannot photograph in their real windows. Debug variant
+          only - it is never part of a release build. See OverlayPreviewActivity's class doc.
+        -->
+        <activity
+            android:name=".OverlayPreviewActivity"
+            android:exported="true" />
     </application>
 </manifest>
