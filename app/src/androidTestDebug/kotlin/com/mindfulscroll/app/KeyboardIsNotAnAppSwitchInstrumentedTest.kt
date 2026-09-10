@@ -95,11 +95,20 @@ class KeyboardIsNotAnAppSwitchInstrumentedTest {
         // appearing in the same instant as the prompt's own window is simply never delivered.
         // Harmless in production, since an undelivered event cannot cause a false app switch,
         // but it made this test pass alone and fail in the full suite depending on timing.
-        if (keyboardShown()) harness.shell("input keyevent KEYCODE_BACK")
+        //
+        // The launch keyboard's timing varies (it came up after the prompt on CI, before it
+        // locally), so wait for it to appear, then close it, rather than checking once. If it
+        // never appears, that's fine too: the point is only that none is up when the field is
+        // tapped.
+        harness.pollUntil(LAUNCH_KEYBOARD_WAIT_MILLIS, "launch-keyboard") { keyboardShown() }
+        val closed = harness.pollUntil(10_000, "keyboard-hidden-first", intervalMillis = 1_000) {
+            if (keyboardShown()) harness.shell("input keyevent KEYCODE_BACK")
+            !keyboardShown()
+        }
         assertTrue(
             "The keyboard would not close, so its opening could not be observed. " +
                 "dumpsys input_method:\n${harness.shell("dumpsys input_method")}",
-            harness.pollUntil(5_000, "keyboard-hidden-first") { !keyboardShown() },
+            closed,
         )
         Thread.sleep(SETTLE_MILLIS)
 
@@ -168,5 +177,8 @@ class KeyboardIsNotAnAppSwitchInstrumentedTest {
 
         /** Well past notificationTimeout, so no other window event is pending when the keyboard opens. */
         const val SETTLE_MILLIS = 1_000L
+
+        /** How long to give the search field's own keyboard to come up before closing it. */
+        const val LAUNCH_KEYBOARD_WAIT_MILLIS = 5_000L
     }
 }
