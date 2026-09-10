@@ -47,6 +47,13 @@ data class ServiceDiagnosticsState(
      * bug: a threshold that can only ever be crossed by an event that never arrives.
      */
     val scheduledThresholdChecksFired: Long = 0,
+    /**
+     * Keyboard windows seen and deliberately NOT treated as leaving the app - see
+     * ForegroundTransitions.isKeyboardWindow. Climbing while you type is correct. Staying at 0
+     * while the keyboard is visibly opening in a monitored app means keyboards are arriving as
+     * foreground changes again, which silently ends the session.
+     */
+    val keyboardWindowEventsIgnored: Long = 0,
     val activeSessionPackage: String? = null,
     val activeSessionScrollCount: Int = 0,
     val activeSessionStartMillis: Long? = null,
