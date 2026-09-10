@@ -182,6 +182,32 @@ like success from every counter available. So:
   `@After` that throws replaces the `@Before` failure that caused it, so guard teardown with
   `if (!::harness.isInitialized) return`.
 
+### Judging whether a feature works: 60–90 days, not a week
+
+No conclusion about whether a feature **changes behaviour** — the pause, intention capture,
+grayscale, anything — may be drawn from less than **60 days** of data, and 90 is the target.
+That covers dogfooding, user feedback, and any trend the app itself computes.
+
+Short pilots overstate durable effects. Any new interruption works at first because it is new,
+and fixed UI interventions typically lose most of their effect within 1–3 weeks of
+high-frequency exposure. Habit formation has a median of roughly 59–66 days, and a range of
+4–335. A good first week means the novelty worked, and a bad first week means the user hasn't
+settled into the feature yet. Neither says whether the feature does anything.
+
+In practice:
+
+- A trend view or metric computed by the app (pause decay #29, and any future adaptive friction
+  #34) shows the data and **does not interpret it** until it has at least 60 days behind it.
+  No automatic action is keyed off a shorter window.
+- "It worked for me this week" or "the numbers dropped after I shipped it" goes in a PR
+  description as an observation, never as evidence the feature is effective.
+- On-device history is pruned at 90 days (`DailyMaintenanceWorker`), so raw data barely covers
+  one evaluation window. Anything that has to be judged across a longer span must keep a
+  coarser aggregate rather than raising the raw retention.
+
+This is about *effectiveness*. It does not delay fixing things that are plainly broken: an overlay
+that never draws or a counter that over-counts is a bug on day one.
+
 ## Out of scope, permanently
 
 iOS, browser extension, cross-device sync or accounts, social features, algorithmic feed
