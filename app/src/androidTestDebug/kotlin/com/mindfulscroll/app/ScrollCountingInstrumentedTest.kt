@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -129,6 +130,7 @@ class ScrollCountingInstrumentedTest {
 
     @Test
     fun deliberateSwipesCountAsRoughlyOneEach() {
+        val opensBefore = todaysOpenCount()
         launchFeed(animate = false)
         Thread.sleep(2_000)
 
@@ -171,6 +173,25 @@ class ScrollCountingInstrumentedTest {
                 "[$lowest, $highest] from $rawEvents raw events. log=${after.recentLog}",
             counted in lowest..highest,
         )
+
+        // One visit, however much scrolling happens in it, is one open (#28).
+        assertEquals(
+            "One visit with $SWIPES swipes in it must count as exactly one open. log=${after.recentLog}",
+            opensBefore + 1,
+            todaysOpenCount(),
+        )
+    }
+
+    /** Today's open count for the feed from the real database; 0 if there is no row yet. */
+    private fun todaysOpenCount(): Int = runBlocking {
+        val stats = EntryPointAccessors.fromApplication(
+            harness.targetContext.applicationContext,
+            TestRepositoryEntryPoint::class.java,
+        ).scrollStatsRepository()
+        val today = stats.todayEpochDay()
+        stats.observeStatsForRange(today, today).first()
+            .firstOrNull { it.packageName == feedPackage }
+            ?.openCount ?: 0
     }
 
     /**

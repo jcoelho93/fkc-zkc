@@ -27,6 +27,10 @@ inside it*.
   swipes as 40 and kept counting an untouched animating screen (#25). The trade-off is that the
   count now errs low. Swipes that land while the feed is still moving merge into one, and so do
   swipes over content that never stops changing.
+- **An open** is one foreground-entry into a monitored app: the same transition that starts a
+  session and shows the intention prompt. It is counted there and nowhere else, so scrolls, a
+  session restarted by "5 more minutes" and the keyboard never add opens. Days recorded before
+  open counting existed hold `NULL` ("not counted"), never 0.
 - **`UsageStatsManager`** is used only for the aggregate "time in app" figures on the dashboard,
   never for live detection.
 
