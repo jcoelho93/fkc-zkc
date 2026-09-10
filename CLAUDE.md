@@ -182,6 +182,14 @@ like success from every counter available. So:
   `@After` that throws replaces the `@Before` failure that caused it, so guard teardown with
   `if (!::harness.isInitialized) return`.
 
+### Copy about the user's behaviour is neutral
+
+Reflection, stats, pause, prompt and notification text states facts and never judges: no
+failure words, no praise, no "should", no urgency, no scores. The checklist, with before/after
+examples, is in [CONTRIBUTING.md → *Writing user-facing copy*](CONTRIBUTING.md#writing-user-facing-copy).
+`CopyToneTest` fails the build on the clearest violations, but it only catches words, so the
+checklist still applies to every copy change.
+
 ### Judging whether a feature works: 60–90 days, not a week
 
 No conclusion about whether a feature **changes behaviour** — the pause, intention capture,

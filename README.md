@@ -6,7 +6,7 @@ infinite-scrolling in apps like Instagram, Reddit, Facebook, TikTok and X/Twitte
 It blocks nothing by force. It watches time and scrolling in the apps *you* choose, asks
 what you came for, and shows a pause screen when you cross a threshold *you* set.
 
-No account, no cloud sync, no analytics, no ads — and no network permission, so it
+No account, no cloud sync, no analytics, no ads — and no internet permission, so it
 *cannot* send data anywhere. See [Privacy & permissions](#privacy--permissions).
 
 ---

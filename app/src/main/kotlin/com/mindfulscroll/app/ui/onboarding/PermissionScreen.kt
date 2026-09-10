@@ -71,7 +71,7 @@ fun PermissionScreen(onContinue: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Both are required for Mindful Scroll to work. Neither one lets any data " +
-                "leave your phone - this app has no network permission at all.",
+                "leave your phone - this app has no internet permission at all.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(24.dp))
