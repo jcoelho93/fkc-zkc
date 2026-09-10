@@ -19,7 +19,9 @@ No account, no cloud sync, no analytics, no ads — and no internet permission, 
    Distraction, Habit, Checking something specific) and an optional note. It never takes a tap
    or a keystroke from the app underneath; ignore it and it goes away. Turn it off in Settings.
 3. **Thresholds** — per app, default **40 scrolls or 10 minutes of continuous foreground
-   time**, whichever comes first.
+   time**, whichever comes first. A scroll is one swipe: events are grouped until 800 ms of
+   stillness, so a single fling counts once, and content changing on screen while you are not
+   touching it does not add up.
 4. **Pause screen** — a full-screen overlay built around *urge-surfing*: a slow breathing ring
    and *"notice the urge to keep scrolling — it usually peaks and fades within a minute or two
    if you watch it instead of acting on it."* After a configurable interval (default 20s) it
@@ -148,7 +150,9 @@ the service is connected, which apps are monitored, and how many events actually
 ## Known gaps
 
 - Scroll counting is best-effort and is known to be zero for Compose feeds; the time half of the
-  threshold is the reliable path.
+  threshold is the reliable path. Where it does work it errs low: a swipe made while the feed is
+  still moving from the last one merges into it, and so do swipes over content that never stops
+  changing.
 - One continuous session per app at a time; no cross-app "total scrolling today" limit.
 - Session, grace-period and the scheduled time check live in memory in the accessibility service
   (a coroutine `delay()`). They are not restored if the process is killed mid-session — the next

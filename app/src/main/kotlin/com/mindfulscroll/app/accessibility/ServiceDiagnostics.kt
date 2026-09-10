@@ -34,8 +34,25 @@ data class ServiceDiagnosticsState(
     val rawScrollEventCount: Long = 0,
     /** TYPE_WINDOW_CONTENT_CHANGED events seen from ANY app - the fallback signal, see accessibility_service_config.xml. */
     val rawContentChangedEventCount: Long = 0,
-    /** Scroll ticks actually counted (foreground+monitored+past debounce) - what drives thresholds. */
+    /**
+     * Swipes actually counted as scrolls (foreground + monitored + first event after an idle gap,
+     * see ScrollGestureCoalescer). This is what drives thresholds. Always the sum of the two
+     * fields below.
+     */
     val countedScrollTicks: Long = 0,
+    /**
+     * [countedScrollTicks] split by which event type opened the swipe. Merged, they hid what
+     * #25 was about: whether the count is being driven by real scroll events or by
+     * content-changed churn.
+     */
+    val countedScrollTicksViaViewScrolled: Long = 0,
+    val countedScrollTicksViaContentChanged: Long = 0,
+    /**
+     * Events from the monitored foreground app that arrived inside a swipe already counted, and
+     * so did not count again. Far outnumbering [countedScrollTicks] is the expected shape: a
+     * single fling emits many events.
+     */
+    val scrollEventsFoldedIntoSwipe: Long = 0,
     /**
      * Times the threshold was evaluated by the delayed check that runs on its own schedule,
      * rather than from inside a scroll handler.

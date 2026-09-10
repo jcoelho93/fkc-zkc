@@ -15,6 +15,7 @@ import com.mindfulscroll.app.intention.IntentionPromptController
 import com.mindfulscroll.app.overlay.OVERLAY_GRACE_MINUTES
 import com.mindfulscroll.app.overlay.OverlayController
 import com.mindfulscroll.app.overlay.OverlayUiState
+import com.mindfulscroll.app.stats.ScrollGestureCoalescer
 import com.mindfulscroll.app.stats.SessionState
 import com.mindfulscroll.app.stats.ThresholdConfig
 import com.mindfulscroll.app.stats.ThresholdEvaluator
@@ -71,7 +72,14 @@ class ScrollMonitorService : AccessibilityService() {
 
     private var currentForegroundPackage: String? = null
     private var lastForegroundChangeAtMillis: Long = System.currentTimeMillis()
-    private var lastCountedScrollAtMillis: Long = 0L
+
+    /**
+     * When the last scroll-related event from the foreground app arrived, on the event's own
+     * monotonic clock (AccessibilityEvent.getEventTime, uptime millis), or null when there has been
+     * none since it came forward. Every event updates it, counted or not, which is what makes one
+     * fling one swipe - see ScrollGestureCoalescer.
+     */
+    private var lastScrollEventAtUptimeMillis: Long? = null
     private var isOverlayShowing = false
     private var currentOverlayEventId: Long? = null
     private val graceUntilMillis = mutableMapOf<String, Long>()
@@ -147,11 +155,11 @@ class ScrollMonitorService : AccessibilityService() {
             }
             AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
                 diagnostics.update { it.copy(rawScrollEventCount = it.rawScrollEventCount + 1) }
-                handleScroll(event.packageName?.toString(), source = "TYPE_VIEW_SCROLLED")
+                handleScroll(event.packageName?.toString(), ScrollEventSource.VIEW_SCROLLED, event.eventTime)
             }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 diagnostics.update { it.copy(rawContentChangedEventCount = it.rawContentChangedEventCount + 1) }
-                handleScroll(event.packageName?.toString(), source = "TYPE_WINDOW_CONTENT_CHANGED")
+                handleScroll(event.packageName?.toString(), ScrollEventSource.WINDOW_CONTENT_CHANGED, event.eventTime)
             }
         }
     }
@@ -186,7 +194,7 @@ class ScrollMonitorService : AccessibilityService() {
         val previousStart = lastForegroundChangeAtMillis
         currentForegroundPackage = packageName
         lastForegroundChangeAtMillis = now
-        lastCountedScrollAtMillis = 0L
+        lastScrollEventAtUptimeMillis = null
         pendingThresholdCheckJob?.cancel()
         diagnostics.update { it.copy(currentForegroundPackage = packageName) }
         diagnostics.log("Foreground -> $packageName")
@@ -208,25 +216,44 @@ class ScrollMonitorService : AccessibilityService() {
         }
     }
 
-    private fun handleScroll(packageName: String?, source: String) {
+    private fun handleScroll(packageName: String?, source: ScrollEventSource, eventAtUptimeMillis: Long) {
         if (packageName.isNullOrEmpty()) return
         if (packageName != currentForegroundPackage) return
         if (!isMonitored(packageName)) return
         if (isOverlayShowing) return
 
-        val now = System.currentTimeMillis()
-        if (now - lastCountedScrollAtMillis < SCROLL_DEBOUNCE_MILLIS) return
-        lastCountedScrollAtMillis = now
+        val startsSwipe = ScrollGestureCoalescer.startsNewGesture(lastScrollEventAtUptimeMillis, eventAtUptimeMillis)
+        lastScrollEventAtUptimeMillis = eventAtUptimeMillis
+        if (!startsSwipe) {
+            // Counted rather than just dropped. Raw events far outnumbering ticks is now the
+            // expected shape, and this is the number that says the gap is swallowing them.
+            diagnostics.update { it.copy(scrollEventsFoldedIntoSwipe = it.scrollEventsFoldedIntoSwipe + 1) }
+            return
+        }
 
-        diagnostics.update { it.copy(countedScrollTicks = it.countedScrollTicks + 1) }
+        val now = System.currentTimeMillis()
+        // Split by the event type that opened the swipe, so the Diagnostics screen can show which
+        // signal is actually driving the count instead of only a merged total (#25).
+        diagnostics.update {
+            when (source) {
+                ScrollEventSource.VIEW_SCROLLED -> it.copy(
+                    countedScrollTicks = it.countedScrollTicks + 1,
+                    countedScrollTicksViaViewScrolled = it.countedScrollTicksViaViewScrolled + 1,
+                )
+                ScrollEventSource.WINDOW_CONTENT_CHANGED -> it.copy(
+                    countedScrollTicks = it.countedScrollTicks + 1,
+                    countedScrollTicksViaContentChanged = it.countedScrollTicksViaContentChanged + 1,
+                )
+            }
+        }
 
         serviceScope.launch {
             val session = scrollStatsRepository.recordScroll(packageName, now)
             diagnostics.update {
                 it.copy(activeSessionPackage = packageName, activeSessionScrollCount = session.scrollCountInSession)
             }
-            diagnostics.log("Scroll #${session.scrollCountInSession} in $packageName (via $source)")
-            Log.d(TAG, "Scroll #${session.scrollCountInSession} in $packageName via $source")
+            diagnostics.log("Scroll #${session.scrollCountInSession} in $packageName (swipe opened by ${source.eventName})")
+            Log.d(TAG, "Scroll #${session.scrollCountInSession} in $packageName, swipe opened by ${source.eventName}")
 
             checkThresholdAndMaybeShowOverlay(packageName)
         }
@@ -490,9 +517,6 @@ class ScrollMonitorService : AccessibilityService() {
     private companion object {
         const val TAG = "MindfulScroll"
 
-        /** Treat scroll events for the same app within this window as one logical swipe. */
-        const val SCROLL_DEBOUNCE_MILLIS = 300L
-
         /**
          * Suppresses a second prompt for the same app this soon after the last one. Aimed at
          * app-switching (checking a message and coming straight back), not at real re-opens - long
@@ -501,4 +525,10 @@ class ScrollMonitorService : AccessibilityService() {
          */
         const val INTENTION_PROMPT_DEBOUNCE_MILLIS = 2 * 60 * 1000L
     }
+}
+
+/** Which accessibility event type a scroll signal arrived as - kept apart for Diagnostics (#25). */
+private enum class ScrollEventSource(val eventName: String) {
+    VIEW_SCROLLED("TYPE_VIEW_SCROLLED"),
+    WINDOW_CONTENT_CHANGED("TYPE_WINDOW_CONTENT_CHANGED"),
 }
