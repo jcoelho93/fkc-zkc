@@ -37,8 +37,10 @@ No account, no cloud sync, no analytics, no ads — and no internet permission, 
 5. **Dashboard** — time in app, times opened and scrolls, for today and the past 7 days,
    plus how often you closed vs. continued. Time and opens are always separate figures, because
    less time in an app can hide a checking habit that hasn't changed at all.
-6. **Settings** — toggle apps, add or remove them, edit thresholds and the pause length, and
-   a **Diagnostics** screen for when detection misbehaves.
+6. **Settings** — a short menu grouped by what each setting affects: the question when you open
+   an app, the pause, and your apps. Each row shows its current value and opens its own page,
+   including per-app thresholds set with sliders and a **Diagnostics** screen for when detection
+   misbehaves.
 
 The chips are deliberately not framed as good or bad: "Habit" and "Distraction" are honest
 answers, and nothing scores you for giving them.
@@ -159,8 +161,6 @@ the service is connected, which apps are monitored, and how many events actually
   (a coroutine `delay()`). They are not restored if the process is killed mid-session — the next
   scroll or foreground change re-arms them, but a session that never scrolls and outlives a
   process death won't trigger.
-- Apps to monitor are picked during onboarding; there is no way yet to add a newly installed app
-  without reinstalling. Existing ones can be toggled and re-thresholded in Settings.
 - Nothing yet reads back the captured intentions — they are stored, but not surfaced.
 - No launcher badge or notification summarising the day.
 

@@ -31,13 +31,14 @@ private val HOME_TABS = listOf(
 )
 
 /**
- * [onEditMonitoredApps] navigates the OUTER nav host, not this screen's own one. The app picker
- * is a full-screen task rather than a tab, and hosting it here would nest its Scaffold inside
- * this one - which applies the status-bar and navigation-bar insets a second time, leaving a gap
- * under the status bar and the confirm button floating above the tab row.
+ * [onOpenPage] navigates the OUTER nav host, not this screen's own one: the app picker and the
+ * Settings subpages. Those are full-screen tasks rather than tabs, and hosting them here would
+ * nest their Scaffold inside this one. That applies the status-bar and navigation-bar insets a
+ * second time, leaving a gap under the status bar and the confirm button floating above the tab
+ * row.
  */
 @Composable
-fun MainScreen(onEditMonitoredApps: () -> Unit = {}) {
+fun MainScreen(onOpenPage: (route: String) -> Unit = {}) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -75,7 +76,7 @@ fun MainScreen(onEditMonitoredApps: () -> Unit = {}) {
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) },
-                    onEditMonitoredApps = onEditMonitoredApps,
+                    onOpenPage = onOpenPage,
                 )
             }
             composable(Routes.DIAGNOSTICS) {
