@@ -18,8 +18,15 @@ inside it*.
   foreground package *and* is on your monitored list. Mindful Scroll's own package can never be
   monitored, so its own screens never count; system UI (shade, recents) reports its own package,
   so it never matches either — and switching to it correctly ends the continuous-session clock.
-- Nested scroll containers can fire several events per swipe, so events from the same app within
-  ~300 ms are treated as one scroll. A tunable MVP judgment call, not a measurement.
+- A fling fires scroll and content-changed events for its whole deceleration tail, so events are
+  **grouped into swipes**: an event only counts as a new scroll after **800 ms with no event**
+  from that app, and every event pushes the end of the swipe forward
+  (`stats/ScrollGestureCoalescer`). One fling is one scroll whichever type it emits, and content
+  that keeps changing on its own stays one swipe instead of accruing. The old rule, 300 ms from
+  the last *counted* event, re-opened inside every fling: on the emulator it counted 10 settled
+  swipes as 40 and kept counting an untouched animating screen (#25). The trade-off is that the
+  count now errs low. Swipes that land while the feed is still moving merge into one, and so do
+  swipes over content that never stops changing.
 - **`UsageStatsManager`** is used only for the aggregate "time in app" figures on the dashboard,
   never for live detection.
 
@@ -44,11 +51,14 @@ than `SYSTEM_ALERT_WINDOW`, so **no "draw over other apps" permission is request
 
 Settings → Diagnostics shows, live: whether the service is connected, monitored apps, current
 foreground package, raw counts of `TYPE_VIEW_SCROLLED` / `TYPE_WINDOW_CONTENT_CHANGED` from
-*any* app, how many were counted as scrolls, and a recent activity log. The same detail goes to
+*any* app, how many swipes were counted as scrolls (split by which event type opened each one),
+how many events were folded into a swipe already counted, and a recent activity log. The same detail goes to
 Logcat under tag `MindfulScroll`. If the interruption never fires:
 
 - raw counters stay at **zero** while you scroll → the OS delivers neither signal for that app;
-- raw counters climb but nothing is counted → the foreground-matching logic is at fault.
+- raw counters climb but neither *scrolls counted* nor *events folded* moves → the
+  foreground-matching logic is at fault. Events far outnumbering scrolls is normal: one swipe
+  emits many.
 
 **Scheduled threshold checks fired** is the third counter to read here, and for most feed apps it
 is the only one that matters. Compose feeds deliver no scroll events at all, so the time half of

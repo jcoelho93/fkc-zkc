@@ -170,6 +170,16 @@ android {
             // keeping it here also keeps room-testing out of the minified release test apk.
             kotlin.srcDirs("src/androidTestDebug/kotlin")
         }
+        if (testBuildTypeName == "debug") {
+            // AGP merges only the androidTest source set's manifest into the test apk, never a
+            // build-type-specific one, so a manifest under src/androidTestDebug is silently
+            // ignored. It declares FeedProbeActivity, whose class exists only in androidTestDebug,
+            // so it is wired in only while debug is the variant under test. The release test apk
+            // must not declare an activity it does not contain.
+            getByName("androidTest") {
+                manifest.srcFile("src/androidTestDebug/AndroidManifest.xml")
+            }
+        }
     }
 }
 

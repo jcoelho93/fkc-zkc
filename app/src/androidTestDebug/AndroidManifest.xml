@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Merged into the debug TEST apk, not the app. That is the point: a component declared here belongs
+  to the test apk's own package (com.mindfulscroll.app.debug.test) and runs in its own process, so
+  to the accessibility service it is a foreign app like any feed, and can be put on the monitored
+  list. The app's own package never can be (ScrollMonitorService.isMonitored), which is why
+  ScrollProbeActivity, living in the app, cannot stand in for a monitored feed.
+
+  Exported so `am start` from the instrumentation can launch it across the package boundary.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="com.mindfulscroll.app.FeedProbeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

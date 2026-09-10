@@ -34,6 +34,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import com.mindfulscroll.app.accessibility.AccessibilityPermissionChecker
+import com.mindfulscroll.app.stats.ScrollGestureCoalescer
 import com.mindfulscroll.app.stats.UsageAccessChecker
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -111,7 +112,10 @@ fun DiagnosticsScreen(
                     LabelValueRow("All events delivered (any type, any app)", state.totalEventCount.toString())
                     LabelValueRow("Raw TYPE_VIEW_SCROLLED (any app)", state.rawScrollEventCount.toString())
                     LabelValueRow("Raw TYPE_WINDOW_CONTENT_CHANGED (any app)", state.rawContentChangedEventCount.toString())
-                    LabelValueRow("Scroll ticks counted", state.countedScrollTicks.toString())
+                    LabelValueRow("Scrolls counted (one per swipe)", state.countedScrollTicks.toString())
+                    LabelValueRow("  swipe opened by TYPE_VIEW_SCROLLED", state.countedScrollTicksViaViewScrolled.toString())
+                    LabelValueRow("  swipe opened by TYPE_WINDOW_CONTENT_CHANGED", state.countedScrollTicksViaContentChanged.toString())
+                    LabelValueRow("Events folded into a swipe already counted", state.scrollEventsFoldedIntoSwipe.toString())
                     LabelValueRow("Scheduled threshold checks fired", state.scheduledThresholdChecksFired.toString())
                     LabelValueRow("Keyboard windows ignored (not an app switch)", state.keyboardWindowEventsIgnored.toString())
                     LabelValueRow("Overlay windows added", state.overlaysShownCount.toString())
@@ -122,8 +126,11 @@ fun DiagnosticsScreen(
                         "If both raw counters stay at 0 while you scroll a monitored app, the " +
                             "OS isn't delivering scroll-related accessibility events to us at all - " +
                             "check the accessibility service is really enabled above. If the raw " +
-                            "counters climb but \"scroll ticks counted\" doesn't, the events aren't " +
-                            "matching the foreground/monitored package - check that above too.",
+                            "counters climb but neither \"scrolls counted\" nor \"events folded\" " +
+                            "does, the events aren't matching the foreground/monitored package - " +
+                            "check that above too. Events far outnumbering scrolls is normal: one " +
+                            "swipe emits many, and it only counts once it follows " +
+                            "${ScrollGestureCoalescer.IDLE_GAP_MILLIS} ms of stillness.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
