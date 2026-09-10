@@ -134,6 +134,15 @@ class ScrollMonitorService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // The keyboard is a window of its own and announces itself under the keyboard's
+                // package, but the user has not left the app they are typing into - see
+                // ForegroundTransitions. Counted, so "the keyboard came up" is visible on the
+                // Diagnostics screen instead of silently vanishing.
+                if (ForegroundTransitions.isKeyboardWindow(event.className?.toString())) {
+                    diagnostics.update { it.copy(keyboardWindowEventsIgnored = it.keyboardWindowEventsIgnored + 1) }
+                    diagnostics.log("Keyboard window (${event.packageName}) ignored - not a foreground change")
+                    return
+                }
                 handleWindowStateChanged(event.packageName?.toString())
             }
             AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
