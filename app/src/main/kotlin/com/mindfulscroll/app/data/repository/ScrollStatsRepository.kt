@@ -40,9 +40,9 @@ class ScrollStatsRepository @Inject constructor(
     }
 
     /**
-     * Records one TYPE_VIEW_SCROLLED event for [packageName]: bumps both the session counter
-     * (for threshold evaluation) and today's running daily total (for the dashboard).
-     * Returns the updated session so the caller can evaluate the threshold against it.
+     * Records one counted swipe for [packageName]: bumps both the session counter (for threshold
+     * evaluation) and today's running daily total (for the dashboard). Returns the updated
+     * session so the caller can evaluate the threshold against it.
      */
     suspend fun recordScroll(packageName: String, nowMillis: Long): ActiveSessionEntity {
         val current = activeSessionDao.get(packageName)
@@ -51,13 +51,8 @@ class ScrollStatsRepository @Inject constructor(
         activeSessionDao.upsert(updated)
 
         val day = epochDayFor(nowMillis)
-        val existingStat = dailyAppStatDao.get(packageName, day)
-        val newStat = if (existingStat == null) {
-            DailyAppStatEntity(packageName, day, scrollCount = 1, foregroundTimeMillis = 0, updatedAtMillis = nowMillis)
-        } else {
-            existingStat.copy(scrollCount = existingStat.scrollCount + 1, updatedAtMillis = nowMillis)
-        }
-        dailyAppStatDao.upsert(newStat)
+        dailyAppStatDao.insertZeroRowIfAbsent(packageName, day, nowMillis)
+        dailyAppStatDao.incrementScrollCount(packageName, day, nowMillis)
 
         return updated
     }
@@ -66,13 +61,22 @@ class ScrollStatsRepository @Inject constructor(
     suspend fun addForegroundTime(packageName: String, deltaMillis: Long, nowMillis: Long) {
         if (deltaMillis <= 0) return
         val day = epochDayFor(nowMillis)
-        val existing = dailyAppStatDao.get(packageName, day)
-        val updated = if (existing == null) {
-            DailyAppStatEntity(packageName, day, scrollCount = 0, foregroundTimeMillis = deltaMillis, updatedAtMillis = nowMillis)
-        } else {
-            existing.copy(foregroundTimeMillis = existing.foregroundTimeMillis + deltaMillis, updatedAtMillis = nowMillis)
-        }
-        dailyAppStatDao.upsert(updated)
+        dailyAppStatDao.insertZeroRowIfAbsent(packageName, day, nowMillis)
+        dailyAppStatDao.addForegroundTime(packageName, day, deltaMillis, nowMillis)
+    }
+
+    /**
+     * Counts one foreground-entry of [packageName] today (#28). The caller invokes this exactly
+     * once per transition into the app, the same transition that starts a session and shows the
+     * intention prompt. Never per scroll, and never when a session is merely restarted inside the
+     * app (after "5 more minutes", say).
+     *
+     * A day recorded before open counting existed keeps its null. See DailyAppStatDao.incrementOpenCount.
+     */
+    suspend fun recordOpen(packageName: String, nowMillis: Long) {
+        val day = epochDayFor(nowMillis)
+        dailyAppStatDao.insertZeroRowIfAbsent(packageName, day, nowMillis)
+        dailyAppStatDao.incrementOpenCount(packageName, day, nowMillis)
     }
 
     suspend fun recordOverlayShown(

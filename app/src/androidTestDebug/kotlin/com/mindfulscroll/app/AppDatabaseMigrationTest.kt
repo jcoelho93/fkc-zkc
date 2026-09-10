@@ -11,6 +11,7 @@ import com.mindfulscroll.app.data.AppDatabase
 import com.mindfulscroll.app.data.MIGRATION_1_2
 import com.mindfulscroll.app.data.MIGRATION_2_3
 import com.mindfulscroll.app.data.MIGRATION_3_4
+import com.mindfulscroll.app.data.MIGRATION_4_5
 import com.mindfulscroll.app.data.entity.IntentionEntity
 import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
@@ -263,6 +264,56 @@ class AppDatabaseMigrationTest {
             db.overlayEventDao().update(migrated.copy(outcome = PauseOutcome.NOT_REALLY))
             val reread = db.overlayEventDao().get(migrated.id)!!
             assertEquals(PauseOutcome.NOT_REALLY, reread.outcome)
+        }
+        db.close()
+    }
+
+    /**
+     * Times-opened (#28): daily_app_stats gains a nullable open count.
+     *
+     * Two things are pinned here. No existing day loses anything. And those days come through as
+     * NULL, "not counted", rather than 0: a v4 day with an hour of foreground time was certainly
+     * opened, and a 0 would say it wasn't.
+     */
+    @Test
+    fun migrate4To5_addsOpenCountAsNotCountedForEveryExistingDay() {
+        val dbName = "migration-4-5-test.db"
+
+        helper.createDatabase(dbName, 4).use { db ->
+            db.execSQL(
+                "INSERT INTO daily_app_stats (packageName, dateEpochDay, scrollCount, foregroundTimeMillis, updatedAtMillis) " +
+                    "VALUES ('com.instagram.android', 20000, 137, 3600000, 1000)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 5, true, MIGRATION_4_5).use { db ->
+            assertEquals(
+                "the v4 daily_app_stats row did not survive a migration that only adds a column",
+                1,
+                db.countRows("daily_app_stats"),
+            )
+        }
+
+        val db = Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            dbName,
+        ).addMigrations(*ALL_MIGRATIONS).build()
+
+        runBlocking {
+            val migrated = db.dailyAppStatDao().get("com.instagram.android", 20000)
+            assertNotNull("the v4 day could not be read back through Room at v5", migrated)
+            assertEquals(137, migrated!!.scrollCount)
+            assertEquals(3_600_000L, migrated.foregroundTimeMillis)
+            assertNull(
+                "a day recorded before opens were counted must read as not counted (null), not " +
+                    "as zero opens",
+                migrated.openCount,
+            )
+
+            // Writable, and a day created after the migration counts from zero.
+            db.dailyAppStatDao().upsert(migrated.copy(dateEpochDay = 20001, openCount = 3))
+            assertEquals(3, db.dailyAppStatDao().get("com.instagram.android", 20001)!!.openCount)
         }
         db.close()
     }

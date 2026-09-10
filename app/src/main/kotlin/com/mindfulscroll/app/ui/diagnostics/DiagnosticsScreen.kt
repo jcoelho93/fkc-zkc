@@ -118,6 +118,7 @@ fun DiagnosticsScreen(
                     LabelValueRow("Events folded into a swipe already counted", state.scrollEventsFoldedIntoSwipe.toString())
                     LabelValueRow("Scheduled threshold checks fired", state.scheduledThresholdChecksFired.toString())
                     LabelValueRow("Keyboard windows ignored (not an app switch)", state.keyboardWindowEventsIgnored.toString())
+                    LabelValueRow("Monitored-app opens counted", state.monitoredAppOpensCounted.toString())
                     LabelValueRow("Overlay windows added", state.overlaysShownCount.toString())
                     LabelValueRow("Overlay windows actually drawn", state.overlaysRenderedCount.toString())
                     LabelValueRow("Last overlay render", state.lastOverlayRender ?: "(no overlay attempted yet)")

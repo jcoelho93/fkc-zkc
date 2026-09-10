@@ -91,5 +91,22 @@ val MIGRATION_3_4 = Migration(3, 4) { db: SupportSQLiteDatabase ->
     db.execSQL("ALTER TABLE `overlay_events` ADD COLUMN `outcome` TEXT")
 }
 
+/**
+ * Times-opened (#28): daily_app_stats gains an open count, kept apart from scroll count and
+ * foreground time so that "how often" can move independently of "how long".
+ *
+ * Purely additive, and nullable on purpose. It's a plain ALTER TABLE ADD COLUMN with no rebuild.
+ * Every existing row gets NULL, which is the honest value: those days were never counted, and a
+ * default of 0 would claim the user opened an app zero times on a day they spent an hour in it.
+ * Rows created after this migration start at 0 (see DailyAppStatEntity.openCount).
+ *
+ * The column definition is copied verbatim from Room's exported schema
+ * (app/schemas/com.mindfulscroll.app.data.AppDatabase/5.json, the `openCount` fragment of
+ * `createSql`): INTEGER, nullable, no default. Room verifies the result on open.
+ */
+val MIGRATION_4_5 = Migration(4, 5) { db: SupportSQLiteDatabase ->
+    db.execSQL("ALTER TABLE `daily_app_stats` ADD COLUMN `openCount` INTEGER")
+}
+
 /** Every migration, in one place, so DatabaseModule cannot forget to register one. */
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)

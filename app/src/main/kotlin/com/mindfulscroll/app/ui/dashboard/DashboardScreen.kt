@@ -32,7 +32,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
         if (state.today.isEmpty()) {
             item {
                 Text(
-                    "No scrolling recorded yet today in a monitored app.",
+                    "Nothing recorded yet today in a monitored app.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -42,7 +42,7 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(app.appLabel, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${app.scrollCount} scrolls · ${app.foregroundMinutes} min",
+                            "${app.foregroundMinutes} min · ${opensLabel(app.openCount)} · ${app.scrollCount} scrolls",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -53,8 +53,31 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
         item {
             Text("Past 7 days", style = MaterialTheme.typography.titleLarge)
         }
+        // Time and opens as two charts, never one number: how long and how often move
+        // independently, and a drop in one can hide a habit unchanged in the other (#28).
         item {
-            SimpleBarChart(bars = state.last7Days.map { it.label to it.scrollCount })
+            ChartSection(
+                title = "Minutes in monitored apps",
+                bars = state.last7Days.map { it.label to it.foregroundMinutes },
+            )
+        }
+        item {
+            ChartSection(
+                title = "Times opened",
+                bars = state.last7Days.map { it.label to it.openCount },
+                footnote = if (state.last7Days.any { it.openCount == null }) {
+                    "– is a day from before opens were counted."
+                } else {
+                    null
+                },
+            )
+        }
+        item {
+            ChartSection(
+                title = "Scrolls",
+                bars = state.last7Days.map { it.label to it.scrollCount },
+                footnote = "Best-effort: many feeds report no scrolling at all.",
+            )
         }
 
         item {
@@ -64,6 +87,24 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
             OverlayOutcomeCard(state.overlayOutcomes)
         }
     }
+}
+
+@Composable
+private fun ChartSection(title: String, bars: List<Pair<String, Int?>>, footnote: String? = null) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        SimpleBarChart(bars = bars, modifier = Modifier.padding(top = 8.dp))
+        footnote?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** "opened 1 time", "opened 5 times", or - for a day from before opens were counted - says so. */
+internal fun opensLabel(openCount: Int?): String = when (openCount) {
+    null -> "opens not counted today"
+    1 -> "opened 1 time"
+    else -> "opened $openCount times"
 }
 
 @Composable

@@ -71,6 +71,12 @@ data class ServiceDiagnosticsState(
      * foreground changes again, which silently ends the session.
      */
     val keyboardWindowEventsIgnored: Long = 0,
+    /**
+     * Foreground-entries into a monitored app counted as an "open" (#28), one per transition
+     * into the app. Should climb once per visit. Climbing while you stay in one app means
+     * something inside it is being read as leaving and coming back.
+     */
+    val monitoredAppOpensCounted: Long = 0,
     val activeSessionPackage: String? = null,
     val activeSessionScrollCount: Int = 0,
     val activeSessionStartMillis: Long? = null,

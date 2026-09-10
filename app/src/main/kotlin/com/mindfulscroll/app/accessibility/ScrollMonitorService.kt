@@ -207,6 +207,11 @@ class ScrollMonitorService : AccessibilityService() {
             }
             if (isMonitored(packageName)) {
                 scrollStatsRepository.startSession(packageName, now)
+                // Here and only here: this is the one transition INTO the app. Scrolls, a session
+                // restarted by "5 more minutes", and the keyboard (set aside before this function)
+                // are not opens (#28).
+                scrollStatsRepository.recordOpen(packageName, now)
+                diagnostics.update { it.copy(monitoredAppOpensCounted = it.monitoredAppOpensCounted + 1) }
                 diagnostics.update {
                     it.copy(activeSessionPackage = packageName, activeSessionScrollCount = 0, activeSessionStartMillis = now)
                 }

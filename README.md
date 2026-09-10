@@ -34,8 +34,9 @@ No account, no cloud sync, no analytics, no ads — and no internet permission, 
    were removed because raising the cost of continuing never surfaced *why* you opened the app.
    Nothing here is scored, ranked or totalled — "Not really" is not a failure, and there are no
    streaks.
-5. **Dashboard** — scrolls and time in app for today and the past 7 days, plus how often you
-   closed vs. continued.
+5. **Dashboard** — time in app, times opened and scrolls, for today and the past 7 days,
+   plus how often you closed vs. continued. Time and opens are always separate figures, because
+   less time in an app can hide a checking habit that hasn't changed at all.
 6. **Settings** — toggle apps, add or remove them, edit thresholds and the pause length, and
    a **Diagnostics** screen for when detection misbehaves.
 
