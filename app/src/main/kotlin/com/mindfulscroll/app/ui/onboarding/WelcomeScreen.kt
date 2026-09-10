@@ -41,7 +41,7 @@ fun WelcomeScreen(onGetStarted: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text(
             text = "Everything stays on this device. There is no account, no analytics, " +
-                "and no network permission - this app cannot send data anywhere even if it " +
+                "and no internet permission - this app cannot send data anywhere even if it " +
                 "wanted to.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,

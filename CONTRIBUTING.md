@@ -158,3 +158,50 @@ Two things worth knowing before writing an instrumented test here:
 - The accessibility node tree *can* see those windows, so overlay UI is testable by tapping even
   though it cannot be photographed - but `uiautomator dump` only walks the **active** window, and
   a deliberately non-focusable overlay is never active.
+
+## Writing user-facing copy
+
+Anything the app says about the user's own behaviour must be **neutral and informational**:
+reflection, stats, the pause screen, the intention prompt, notifications. It reports what happened.
+It never implies the user failed, broke something, or should feel bad, and it doesn't praise
+them either.
+
+This isn't only about being polite. Guilt and nagging have small average effects in the
+research, and they can **backfire through reactance**, entrenching the very behaviour they target.
+It also protects the data. If a chip reads as an admission, people learn to tap a nicer one,
+and the weekly report ends up comparing answers that were chosen to look good rather than
+true ones.
+
+### Checklist
+
+Check every new or changed string against these before merging:
+
+- [ ] **States a fact, not a verdict.** A count, a duration, a comparison with the user's
+      *own* stated intention. No "too much", "wasted", "only", "again".
+- [ ] **No failure or rule language.** Not "broke", "failed", "exceeded your limit", "blew
+      your goal", "cheated". A threshold is a setting the user chose, not a rule they broke.
+- [ ] **No praise either.** "Great job!" and "Well done" judge in the other direction, and they
+      make the answers that don't get praised feel like failures.
+- [ ] **No "should".** Copy doesn't tell the user what to want. Suggestions are
+      offered as options ("Close Instagram" / "Keep scrolling"), with equal visual weight.
+- [ ] **No urgency.** No exclamation marks, no countdown pressure, no red or alarm colours for
+      the user's own numbers.
+- [ ] **No scores.** No streaks, points, badges, ranks or "addiction score". These are permanently out of
+      scope (see [CLAUDE.md](CLAUDE.md)).
+
+### Before and after
+
+| Don't | Do |
+|---|---|
+| "You broke your goal again." | "You opened Instagram 14 times this week, 3 more than last week." |
+| "You wasted 2 hours on Reddit today 😬" | "2 h 05 min in Reddit today." |
+| "Only 20% of your Instagram visits were worth it." | "On Instagram you said *connection* on 60% of opens, and felt you got it 1 time in 5." |
+| "Great job! You closed the app!" | *(no comment. The choice is recorded, not graded)* |
+
+### Enforced partly by a test
+
+`CopyToneTest` scans the string literals in the app's user-facing packages for the clearest
+violations: failure words, praise, "should", streak/score vocabulary. It fails the build on a
+match. It catches words, not tone, so it doesn't replace the checklist. A line that needs one of
+those words legitimately can carry a `// copy-tone: ok - <why>` comment, and the reason goes in
+the PR.
