@@ -54,3 +54,8 @@
 -keep class com.mindfulscroll.app.accessibility.ServiceDiagnosticsState { *; }
 -keep class com.mindfulscroll.app.overlay.OverlayController { *; }
 -keep class com.mindfulscroll.app.overlay.OverlayUiState { *; }
+# The grayscale test (#27) seeds a monitored app through DiagnosticsEntryPoint on the release
+# variant. Only the repository's public surface and the entity are pinned; the DAO and Room's
+# generated code behind them stay minified.
+-keep class com.mindfulscroll.app.data.repository.MonitoredAppRepository { public *; }
+-keep class com.mindfulscroll.app.data.entity.MonitoredAppEntity { *; }

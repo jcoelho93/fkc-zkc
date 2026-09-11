@@ -36,11 +36,13 @@ fun SettingsScreen(
     val apps by viewModel.apps.collectAsState()
     val intentionCaptureEnabled by viewModel.isIntentionCaptureEnabled.collectAsState()
     val pauseDurationSeconds by viewModel.pauseDurationSeconds.collectAsState()
+    val grayscalePermissionGranted = rememberGrayscalePermissionGranted()
 
     SettingsMenu(
         apps = apps,
         intentionCaptureEnabled = intentionCaptureEnabled,
         pauseDurationSeconds = pauseDurationSeconds,
+        grayscalePermissionGranted = grayscalePermissionGranted,
         onOpenPage = onOpenPage,
         onOpenDiagnostics = onOpenDiagnostics,
     )
@@ -52,6 +54,7 @@ internal fun SettingsMenu(
     apps: List<MonitoredAppEntity>,
     intentionCaptureEnabled: Boolean,
     pauseDurationSeconds: Int,
+    grayscalePermissionGranted: Boolean,
     onOpenPage: (route: String) -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
@@ -72,6 +75,12 @@ internal fun SettingsMenu(
                     title = "Ask what I'm looking for",
                     value = SettingsLabels.onOff(intentionCaptureEnabled),
                     onClick = { onOpenPage(Routes.SETTINGS_INTENTION) },
+                )
+                SettingsDivider()
+                SettingsRow(
+                    title = "Grayscale",
+                    value = SettingsLabels.grayscale(apps, grayscalePermissionGranted),
+                    onClick = { onOpenPage(Routes.SETTINGS_GRAYSCALE) },
                 )
             }
         }

@@ -19,6 +19,21 @@ internal object SettingsLabels {
         else -> "${apps.size} apps"
     }
 
+    /**
+     * Counts only monitored apps, like [thresholdSummary]: grayscale on a switched-off app applies
+     * to nothing. Without the permission the row says the setup is missing rather than showing a
+     * count, since a count would claim grayscale is happening when it is not.
+     */
+    fun grayscale(apps: List<MonitoredAppEntity>, permissionGranted: Boolean): String {
+        val count = apps.count { it.isMonitored && it.grayscaleEnabled }
+        return when {
+            count == 0 -> "Off"
+            !permissionGranted -> "Needs setup"
+            count == 1 -> "1 app"
+            else -> "$count apps"
+        }
+    }
+
     fun threshold(app: MonitoredAppEntity): String =
         "${app.scrollThreshold} scrolls or ${app.timeThresholdMinutes} min"
 

@@ -1,5 +1,6 @@
 package com.mindfulscroll.app.accessibility
 
+import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import com.mindfulscroll.app.overlay.OverlayController
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -24,4 +25,12 @@ interface DiagnosticsEntryPoint {
     fun serviceDiagnostics(): ServiceDiagnostics
 
     fun overlayController(): OverlayController
+
+    /**
+     * The one write-side handle here, unlike the debug-only TestRepositoryEntryPoint. The grayscale
+     * test (#27) has to put a monitored app on the list to drive a real foreground transition, and
+     * it has to do that on the release variant too: a settings write reached through an R8-minified
+     * accessibility service is exactly the kind of thing that release run exists to check.
+     */
+    fun monitoredAppRepository(): MonitoredAppRepository
 }

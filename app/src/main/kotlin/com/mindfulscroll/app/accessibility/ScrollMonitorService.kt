@@ -1,6 +1,7 @@
 package com.mindfulscroll.app.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.mindfulscroll.app.data.AppSettings
@@ -11,6 +12,7 @@ import com.mindfulscroll.app.data.entity.PauseOutcome
 import com.mindfulscroll.app.data.repository.IntentionRepository
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import com.mindfulscroll.app.data.repository.ScrollStatsRepository
+import com.mindfulscroll.app.grayscale.GrayscaleController
 import com.mindfulscroll.app.intention.IntentionPromptController
 import com.mindfulscroll.app.overlay.OVERLAY_GRACE_MINUTES
 import com.mindfulscroll.app.overlay.OverlayController
@@ -63,6 +65,8 @@ class ScrollMonitorService : AccessibilityService() {
     @Inject lateinit var appSettings: AppSettings
 
     @Inject lateinit var diagnostics: ServiceDiagnostics
+
+    @Inject lateinit var grayscaleController: GrayscaleController
 
     private var serviceJob: Job? = null
     private lateinit var serviceScope: CoroutineScope
@@ -121,6 +125,11 @@ class ScrollMonitorService : AccessibilityService() {
         overlayController.attach(this)
         intentionPromptController.attach(this)
 
+        // Anything left from a previous run is undone before anything else: if the service died
+        // with a monitored app in front, the whole screen is still gray and nothing else will fix
+        // it. The first foreground event re-applies it if that app is still in front.
+        grayscaleController.restoreIfApplied("service connected")
+
         diagnostics.log("Service connected")
         diagnostics.log("Resolved serviceInfo: $resolved")
         Log.d(TAG, "onServiceConnected - resolved serviceInfo: $resolved")
@@ -131,6 +140,9 @@ class ScrollMonitorService : AccessibilityService() {
                 diagnostics.update { it.copy(monitoredPackages = monitoredApps.keys) }
                 diagnostics.log("Monitored apps updated: ${monitoredApps.keys}")
                 Log.d(TAG, "Monitored apps: ${monitoredApps.keys}")
+                // A grayscale switch flipped (or an app removed) while that app is in front takes
+                // effect now, rather than at the next app switch.
+                updateGrayscale(currentForegroundPackage)
             }
             .launchIn(serviceScope)
     }
@@ -199,6 +211,9 @@ class ScrollMonitorService : AccessibilityService() {
         diagnostics.update { it.copy(currentForegroundPackage = packageName) }
         diagnostics.log("Foreground -> $packageName")
 
+        // After both guards above, so neither our own windows nor the keyboard toggle grayscale.
+        updateGrayscale(packageName)
+
         serviceScope.launch {
             if (previousPackage != null && isMonitored(previousPackage)) {
                 scrollStatsRepository.addForegroundTime(previousPackage, now - previousStart, now)
@@ -219,6 +234,13 @@ class ScrollMonitorService : AccessibilityService() {
                 scheduleThresholdCheck(packageName)
             }
         }
+    }
+
+    private fun updateGrayscale(foregroundPackage: String?) {
+        val wanted = foregroundPackage != null &&
+            isMonitored(foregroundPackage) &&
+            monitoredApps[foregroundPackage]?.grayscaleEnabled == true
+        grayscaleController.onForeground(foregroundPackage, wantGrayscale = wanted)
     }
 
     private fun handleScroll(packageName: String?, source: ScrollEventSource, eventAtUptimeMillis: Long) {
@@ -507,10 +529,18 @@ class ScrollMonitorService : AccessibilityService() {
         overlayController.hide()
         intentionPromptController.hide()
         isOverlayShowing = false
+        grayscaleController.restoreIfApplied("service interrupted")
+    }
+
+    /** Turning the service off in Settings arrives here; the screen must not stay gray after it. */
+    override fun onUnbind(intent: Intent?): Boolean {
+        grayscaleController.restoreIfApplied("service unbound")
+        return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        grayscaleController.restoreIfApplied("service destroyed")
         overlayController.detach()
         intentionPromptController.detach()
         pendingThresholdCheckJob?.cancel()
