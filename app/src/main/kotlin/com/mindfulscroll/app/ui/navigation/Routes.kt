@@ -12,6 +12,12 @@ object Routes {
     const val DIAGNOSTICS = "main/diagnostics"
 
     /**
+     * The weekly reflection (#6). An outer route like the Settings subpages, reached from the
+     * dashboard and from the weekly notification.
+     */
+    const val REFLECTION = "main/reflection"
+
+    /**
      * The app picker reached from Settings, as opposed to [APP_SELECTION], which is the
      * onboarding step. Same screen, different entry: this one has somewhere to go back to.
      */
@@ -22,6 +28,7 @@ object Routes {
     const val SETTINGS_INTENTION = "main/settings/intention"
     const val SETTINGS_PAUSE_LENGTH = "main/settings/pause-length"
     const val SETTINGS_THRESHOLDS = "main/settings/thresholds"
+    const val SETTINGS_WEEKLY_REFLECTION = "main/settings/weekly-reflection"
 
     const val ARG_PACKAGE_NAME = "packageName"
     const val SETTINGS_THRESHOLD_EDITOR = "main/settings/thresholds/{$ARG_PACKAGE_NAME}"

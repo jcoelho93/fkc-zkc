@@ -99,6 +99,7 @@ app/src/main/kotlin/com/mindfulscroll/app/
 ├── data/            Room entities, DAOs, database, repositories, prefs
 ├── intention/       The "what are you hoping to find?" prompt + its Compose UI
 ├── overlay/         The interruption overlay window + its Compose UI
+├── reflection/      Weekly reflection: aggregation, weekly job, its one notification
 ├── stats/           Threshold logic, usage-access check, WorkManager jobs
 ├── ui/              Onboarding, app selection, dashboard, settings, diagnostics, nav
 ├── di/              Hilt modules

@@ -36,11 +36,13 @@ fun SettingsScreen(
     val apps by viewModel.apps.collectAsState()
     val intentionCaptureEnabled by viewModel.isIntentionCaptureEnabled.collectAsState()
     val pauseDurationSeconds by viewModel.pauseDurationSeconds.collectAsState()
+    val weeklyPromptEnabled by viewModel.isWeeklyReflectionPromptEnabled.collectAsState()
 
     SettingsMenu(
         apps = apps,
         intentionCaptureEnabled = intentionCaptureEnabled,
         pauseDurationSeconds = pauseDurationSeconds,
+        weeklyReflectionPromptEnabled = weeklyPromptEnabled,
         onOpenPage = onOpenPage,
         onOpenDiagnostics = onOpenDiagnostics,
     )
@@ -54,6 +56,7 @@ internal fun SettingsMenu(
     pauseDurationSeconds: Int,
     onOpenPage: (route: String) -> Unit,
     onOpenDiagnostics: () -> Unit,
+    weeklyReflectionPromptEnabled: Boolean = false,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -87,6 +90,15 @@ internal fun SettingsMenu(
                     title = "When the pause appears",
                     value = SettingsLabels.thresholdSummary(apps),
                     onClick = { onOpenPage(Routes.SETTINGS_THRESHOLDS) },
+                )
+            }
+        }
+        item {
+            SettingsSection(title = "Reflection") {
+                SettingsRow(
+                    title = "Weekly reflection prompt",
+                    value = SettingsLabels.onOff(weeklyReflectionPromptEnabled),
+                    onClick = { onOpenPage(Routes.SETTINGS_WEEKLY_REFLECTION) },
                 )
             }
         }

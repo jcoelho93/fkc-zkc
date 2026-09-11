@@ -3,6 +3,7 @@ package com.mindfulscroll.app
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.mindfulscroll.app.data.AppSettings
 import com.mindfulscroll.app.stats.WorkScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -13,6 +14,9 @@ class MindfulScrollApp : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var appSettings: AppSettings
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -21,5 +25,6 @@ class MindfulScrollApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         WorkScheduler.scheduleDailyMaintenance(this)
+        WorkScheduler.syncWeeklyReflection(this, appSettings.weeklyReflectionPromptEnabledNow())
     }
 }

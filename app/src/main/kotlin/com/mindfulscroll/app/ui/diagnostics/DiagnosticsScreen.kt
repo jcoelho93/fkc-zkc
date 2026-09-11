@@ -55,12 +55,17 @@ fun DiagnosticsScreen(
     var usageAccessGranted by remember {
         mutableStateOf(UsageAccessChecker.isUsageAccessGranted(context))
     }
+    val weeklyPromptEnabled by viewModel.weeklyPromptEnabled.collectAsState()
+    var weeklyLastRun by remember { mutableStateOf(viewModel.weeklyLastRun()) }
+    var weeklyBlockedReason by remember { mutableStateOf(viewModel.weeklyBlockedReason()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessibilityGranted = AccessibilityPermissionChecker.isScrollMonitorServiceEnabled(context)
                 usageAccessGranted = UsageAccessChecker.isUsageAccessGranted(context)
+                weeklyLastRun = viewModel.weeklyLastRun()
+                weeklyBlockedReason = viewModel.weeklyBlockedReason()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -159,6 +164,27 @@ fun DiagnosticsScreen(
                         "Answered being far below drawn is not a fault - the prompt is meant to be " +
                             "ignorable, and \"opened it with nothing in mind\" is recorded too. Drawn " +
                             "staying below added is the number that means something is broken.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+
+            item {
+                DiagnosticsCard(title = "Weekly reflection prompt") {
+                    LabelValueRow("Prompt", if (weeklyPromptEnabled) "On" else "Off")
+                    LabelValueRow("Notifications can be shown", weeklyBlockedReason?.let { "NO - $it" } ?: "Yes")
+                    LabelValueRow(
+                        "Last weekly run",
+                        weeklyLastRun?.let { run ->
+                            val at = SimpleDateFormat("EEE d MMM HH:mm", Locale.getDefault()).format(Date(run.atMillis))
+                            "$at - ${run.result.description}" + (run.detail?.let { " ($it)" } ?: "")
+                        } ?: "(not run yet)",
+                    )
+                    Text(
+                        "Runs once a week while the prompt is on. \"Posted\" alone means Android " +
+                            "accepted it; \"showing\" means it was in the notification shade " +
+                            "straight afterwards.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )

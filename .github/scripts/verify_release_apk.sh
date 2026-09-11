@@ -48,8 +48,12 @@ say "1. Permissions the app can ever hold"
 # story and a false one: a reader running `dumpsys package` sees this list, not our intentions.
 # Provenance verified against the manifest merger report:
 #   PACKAGE_USAGE_STATS      ours     - foreground time for the dashboard
-#   RECEIVE_BOOT_COMPLETED   ours     - re-arm the daily maintenance job after reboot
-#   WAKE_LOCK                androidx.work:work-runtime  - finish a background job
+#   RECEIVE_BOOT_COMPLETED   ours     - re-arm the daily maintenance and weekly reflection jobs
+#                            after reboot
+#   POST_NOTIFICATIONS       ours     - the weekly reflection prompt (#6, #33). Opt-in: off by
+#                            default, requested at runtime only when the user switches it on.
+#                            One low-importance notification a week, and nothing else.
+#   WAKE_LOCK               androidx.work:work-runtime  - finish a background job
 #   ACCESS_NETWORK_STATE     androidx.work:work-runtime  - evaluate network CONSTRAINTS on jobs.
 #                            Reads connectivity state; cannot transmit. Without INTERNET the OS
 #                            blocks all network I/O regardless.
@@ -61,6 +65,7 @@ say "1. Permissions the app can ever hold"
 # introduces a permission should be a release blocker, not something discovered by a user.
 EXPECTED_PERMS="android.permission.PACKAGE_USAGE_STATS
 android.permission.RECEIVE_BOOT_COMPLETED
+android.permission.POST_NOTIFICATIONS
 android.permission.WAKE_LOCK
 android.permission.ACCESS_NETWORK_STATE
 android.permission.FOREGROUND_SERVICE
