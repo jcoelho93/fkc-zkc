@@ -136,8 +136,12 @@ Three checks, all required to be green before merge:
   `r8-release-mapping` artifact.
 - **instrumented-tests (debug)** and **instrumented-tests (release)** — the same suite on an
   emulator, twice. The release run is not a duplicate: it installs the R8-minified APK and
-  answers the two questions only a runtime check on the shipped artifact can — does the system
-  still resolve the full accessibility event mask, and does the overlay window still draw.
+  answers the two questions only a runtime check can — does the system still resolve the full
+  accessibility event mask, and does the overlay window still draw. It is **not** the shipped
+  APK: its keep rules hold `kotlin.**` and `kotlinx.coroutines.**` whole, which also changes how
+  R8 optimises the app's own classes. The measured gap is in
+  `app/proguard-rules-instrumentation.pro`; `.github/scripts/r8_instrumentation_gap.sh`
+  re-measures it, and the `build` job prints it on every PR.
 
 Releases are tag-triggered (`git tag v0.3.0 && git push origin v0.3.0`), signed, and published
 as a GitHub Release for Obtainium. A missing keystore must keep producing an **unsigned** APK —
