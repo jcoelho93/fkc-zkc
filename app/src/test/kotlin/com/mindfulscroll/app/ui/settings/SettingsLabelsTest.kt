@@ -42,6 +42,21 @@ class SettingsLabelsTest {
         assertThat(SettingsLabels.thresholdSummary(apps)).isEqualTo("40 scrolls or 10 min")
         assertThat(SettingsLabels.thresholdSummary(listOf(app("x", monitored = false)))).isEqualTo("None monitored")
     }
+
+    @Test
+    fun `grayscale counts monitored apps with it on, and says when setup is missing`() {
+        val gray = app("a").copy(grayscaleEnabled = true)
+        val grayButNotMonitored = app("x", monitored = false).copy(grayscaleEnabled = true)
+
+        assertThat(SettingsLabels.grayscale(emptyList(), permissionGranted = true)).isEqualTo("Off")
+        assertThat(SettingsLabels.grayscale(listOf(app("b")), permissionGranted = true)).isEqualTo("Off")
+        assertThat(SettingsLabels.grayscale(listOf(grayButNotMonitored), permissionGranted = true)).isEqualTo("Off")
+        assertThat(SettingsLabels.grayscale(listOf(gray, app("b")), permissionGranted = true)).isEqualTo("1 app")
+        assertThat(SettingsLabels.grayscale(listOf(gray, app("c").copy(grayscaleEnabled = true)), permissionGranted = true))
+            .isEqualTo("2 apps")
+        // A count would claim grayscale is happening; without the permission it is not.
+        assertThat(SettingsLabels.grayscale(listOf(gray), permissionGranted = false)).isEqualTo("Needs setup")
+    }
 }
 
 class ThresholdRangesTest {

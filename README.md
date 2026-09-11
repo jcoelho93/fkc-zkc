@@ -39,20 +39,18 @@ No account, no cloud sync, no analytics, no ads — and no internet permission, 
 5. **Dashboard** — time in app, times opened and scrolls, for today and the past 7 days,
    plus how often you closed vs. continued. Time and opens are always separate figures, because
    less time in an app can hide a checking habit that hasn't changed at all.
-6. **Weekly reflection** — per app, what you said when opening it next to how the pause's
-   *"did you get it?"* went on those visits: *"Connection — your answer 5 of 12 times asked. At
-   the pause, 4 times: yes 1 · kind of 2 · not really 0 · no answer 1."* Every time the question
-   appeared is counted, answered or not, so the numbers are never only the opens you felt like
-   explaining. It shows counts and draws no conclusions. Reachable from the Dashboard, for the
-   past 7 days and the twelve weeks before.
-
-   An optional **weekly prompt** (off by default) posts one quiet notification on Sunday evening
-   when the week has something in it: no sound, no dot on the app icon, one at a time, and
-   nothing follows if you swipe it away.
+6. **Grayscale (optional)** — per app, show it in black and white while it is open; colour
+   comes back the moment you leave. Of everything this app does, reduced colour is the
+   intervention with the most consistent phone-specific trial evidence. It needs one
+   permission Android only lets you grant **from a computer**
+   (`adb shell pm grant com.mindfulscroll.app android.permission.WRITE_SECURE_SETTINGS`), and
+   until then the switches do nothing. It uses Android's own colour correction, so while it is on it
+   covers the whole screen, not just the app's own window, and it never touches colour
+   correction you already had on.
 7. **Settings** — a short menu grouped by what each setting affects: the question when you open
-   an app, the pause, the weekly prompt, and your apps. Each row shows its current value and
-   opens its own page, including per-app thresholds set with sliders and a **Diagnostics** screen
-   for when detection misbehaves.
+   an app, the pause, and your apps. Each row shows its current value and opens its own page,
+   including per-app thresholds set with sliders and a **Diagnostics** screen for when detection
+   misbehaves.
 
 The chips are deliberately not framed as good or bad: "Habit" and "Distraction" are honest
 answers, and nothing scores you for giving them.
@@ -96,22 +94,22 @@ Two permissions are required, both explained in plain language during onboarding
 | **Accessibility service** (`BIND_ACCESSIBILITY_SERVICE`) | Notice scroll and window events in the apps you chose, and draw the prompt and pause screen. | Does **not** read screen content (`canRetrieveWindowContent` is `false`). Reacts only to scroll and window-change events. |
 | **Usage access** (`PACKAGE_USAGE_STATS`) | Read how long monitored apps were in the foreground, for your own stats. | A "special access" permission: Android only lets an app link you to the system settings screen. Never auto-granted. |
 
-One more is **optional**, and only asked for if you turn it on:
+One more is **optional**, and only matters if you want grayscale:
 
 | Permission | Why it is needed | Notes |
 |---|---|---|
-| **Notifications** (`POST_NOTIFICATIONS`) | The weekly reflection prompt: one quiet notification on Sunday evening. | Off by default. Requested (Android 13+) only when you switch the prompt on in Settings; saying no keeps it off, and nothing asks again. The reflection itself needs no permission. It is the only notification the app ever posts. |
+| **Modify secure system settings** (`WRITE_SECURE_SETTINGS`) | Switch Android's colour correction to grayscale while a monitored app you picked is open, and back when you leave it. | Android **cannot grant this from the phone** — only from a computer, with `adb shell pm grant com.mindfulscroll.app android.permission.WRITE_SECURE_SETTINGS`. Without it, grayscale does nothing and the rest of the app is unaffected. The app writes exactly two settings with it (`accessibility_display_daltonizer_enabled` and `accessibility_display_daltonizer`), never overwrites colour correction you turned on yourself, and puts the old values back. |
 
 ### Every permission in the shipped APK
 
-Not just the ones we ask you for — the complete list, including what libraries add, because that
+Not just the two we ask you for — the complete list, including what libraries add, because that
 is what you will see if you check with `adb shell dumpsys package com.mindfulscroll.app`.
 
 | Permission | Source | What it allows |
 |---|---|---|
 | `PACKAGE_USAGE_STATS` | ours | Foreground time for your own stats |
-| `RECEIVE_BOOT_COMPLETED` | ours | Re-arm the daily maintenance and weekly reflection jobs after a reboot |
-| `POST_NOTIFICATIONS` | ours | The opt-in weekly reflection prompt. Declared in every install; only granted if you switch the prompt on |
+| `RECEIVE_BOOT_COMPLETED` | ours | Re-arm the daily maintenance job after a reboot, and undo grayscale if the phone restarted while it was on |
+| `WRITE_SECURE_SETTINGS` | ours | Optional grayscale. Declared, but **held only if you grant it over adb** — see above |
 | `WAKE_LOCK` | WorkManager | Finish a background job before the device sleeps |
 | `ACCESS_NETWORK_STATE` | WorkManager | *Read* connectivity state to schedule jobs. It cannot transmit anything, and without `INTERNET` there is nothing to transmit with |
 | `FOREGROUND_SERVICE` | WorkManager, Lifecycle | Run a job in the foreground |
@@ -261,10 +259,11 @@ the service is connected, which apps are monitored, and how many events actually
   (a coroutine `delay()`). They are not restored if the process is killed mid-session — the next
   scroll or foreground change re-arms them, but a session that never scrolls and outlives a
   process death won't trigger.
-- The weekly reflection only covers what the on-device history still holds: 90 days, so the
-  current week and the twelve before it.
-- No launcher badge, and no daily summary. The weekly prompt is the only notification, and only
-  if you turn it on.
+- Nothing yet reads back the captured intentions — they are stored, but not surfaced.
+- No launcher badge or notification summarising the day.
+- Grayscale switches on the same foreground changes the rest of the app uses. Anything Android
+  reports as leaving the app brings colour back, and it returns when the app next reports itself
+  in front.
 
 **Permanently out of scope:** iOS, browser extension, cross-device sync or accounts, social or
 comparison features, algorithmic feed replacement, and any gamification (streaks, points,

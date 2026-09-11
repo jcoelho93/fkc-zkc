@@ -52,6 +52,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { monitoredAppRepository.setMonitored(app, monitored) }
     }
 
+    fun setGrayscaleEnabled(packageName: String, enabled: Boolean) {
+        viewModelScope.launch { monitoredAppRepository.setGrayscaleEnabled(packageName, enabled) }
+    }
+
     fun updateThresholds(packageName: String, scrollThreshold: Int, timeThresholdMinutes: Int) {
         viewModelScope.launch {
             monitoredAppRepository.updateThresholds(packageName, scrollThreshold, timeThresholdMinutes)

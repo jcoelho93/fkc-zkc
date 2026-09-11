@@ -108,5 +108,22 @@ val MIGRATION_4_5 = Migration(4, 5) { db: SupportSQLiteDatabase ->
     db.execSQL("ALTER TABLE `daily_app_stats` ADD COLUMN `openCount` INTEGER")
 }
 
+/**
+ * Grayscale (#27): monitored_apps gains a per-app opt-in.
+ *
+ * Purely additive, a plain ALTER TABLE ADD COLUMN. Unlike the nullable columns above this one is
+ * NOT NULL with a default, because "off" is the true value for every existing app rather than an
+ * unknown: nobody had grayscale before it existed. SQLite requires a default for a NOT NULL added
+ * column, and Room compares that default on open, which is why the entity declares
+ * `@ColumnInfo(defaultValue = "0")` too.
+ *
+ * The column definition is copied verbatim from Room's exported schema
+ * (app/schemas/com.mindfulscroll.app.data.AppDatabase/6.json, the `grayscaleEnabled` fragment of
+ * `createSql`). Room verifies the result on open.
+ */
+val MIGRATION_5_6 = Migration(5, 6) { db: SupportSQLiteDatabase ->
+    db.execSQL("ALTER TABLE `monitored_apps` ADD COLUMN `grayscaleEnabled` INTEGER NOT NULL DEFAULT 0")
+}
+
 /** Every migration, in one place, so DatabaseModule cannot forget to register one. */
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)

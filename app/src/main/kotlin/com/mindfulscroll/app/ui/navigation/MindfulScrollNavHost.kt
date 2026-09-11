@@ -1,7 +1,6 @@
 package com.mindfulscroll.app.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -13,33 +12,15 @@ import com.mindfulscroll.app.ui.appselection.AppSelectionScreen
 import com.mindfulscroll.app.ui.home.MainScreen
 import com.mindfulscroll.app.ui.onboarding.PermissionScreen
 import com.mindfulscroll.app.ui.onboarding.WelcomeScreen
-import com.mindfulscroll.app.ui.reflection.ReflectionScreen
+import com.mindfulscroll.app.ui.settings.GrayscaleSettingsScreen
 import com.mindfulscroll.app.ui.settings.IntentionCaptureSettingsScreen
 import com.mindfulscroll.app.ui.settings.PauseLengthSettingsScreen
 import com.mindfulscroll.app.ui.settings.ThresholdEditorScreen
 import com.mindfulscroll.app.ui.settings.ThresholdListScreen
-import com.mindfulscroll.app.ui.settings.WeeklyReflectionSettingsScreen
 
-/**
- * [pendingRoute] is a page to open on top of MAIN - the weekly reflection, when its notification
- * is tapped. Ignored until onboarding is done: there is nothing to reflect on before that, and
- * jumping past onboarding would leave it unfinished.
- */
 @Composable
-fun MindfulScrollNavHost(
-    navController: NavHostController = rememberNavController(),
-    pendingRoute: String? = null,
-    onPendingRouteOpened: () -> Unit = {},
-) {
+fun MindfulScrollNavHost(navController: NavHostController = rememberNavController()) {
     val entryViewModel: AppEntryViewModel = hiltViewModel()
-
-    LaunchedEffect(pendingRoute) {
-        if (pendingRoute == null) return@LaunchedEffect
-        if (entryViewModel.startDestination == Routes.MAIN) {
-            navController.navigate(pendingRoute) { launchSingleTop = true }
-        }
-        onPendingRouteOpened()
-    }
 
     NavHost(navController = navController, startDestination = entryViewModel.startDestination) {
         composable(Routes.WELCOME) {
@@ -78,13 +59,10 @@ fun MindfulScrollNavHost(
         composable(Routes.SETTINGS_INTENTION) {
             IntentionCaptureSettingsScreen(onBack = { navController.popBackStack() })
         }
-        composable(Routes.REFLECTION) {
-            ReflectionScreen(onBack = { navController.popBackStack() })
-        }
-        composable(Routes.SETTINGS_WEEKLY_REFLECTION) {
-            WeeklyReflectionSettingsScreen(
+        composable(Routes.SETTINGS_GRAYSCALE) {
+            GrayscaleSettingsScreen(
                 onBack = { navController.popBackStack() },
-                onOpenReflection = { navController.navigate(Routes.REFLECTION) },
+                onChooseApps = { navController.navigate(Routes.EDIT_MONITORED_APPS) },
             )
         }
         composable(Routes.SETTINGS_PAUSE_LENGTH) {

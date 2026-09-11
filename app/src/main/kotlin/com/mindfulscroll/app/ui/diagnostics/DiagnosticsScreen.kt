@@ -55,17 +55,14 @@ fun DiagnosticsScreen(
     var usageAccessGranted by remember {
         mutableStateOf(UsageAccessChecker.isUsageAccessGranted(context))
     }
-    val weeklyPromptEnabled by viewModel.weeklyPromptEnabled.collectAsState()
-    var weeklyLastRun by remember { mutableStateOf(viewModel.weeklyLastRun()) }
-    var weeklyBlockedReason by remember { mutableStateOf(viewModel.weeklyBlockedReason()) }
+    var resumeCount by remember { mutableStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 accessibilityGranted = AccessibilityPermissionChecker.isScrollMonitorServiceEnabled(context)
                 usageAccessGranted = UsageAccessChecker.isUsageAccessGranted(context)
-                weeklyLastRun = viewModel.weeklyLastRun()
-                weeklyBlockedReason = viewModel.weeklyBlockedReason()
+                resumeCount++
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -73,6 +70,9 @@ fun DiagnosticsScreen(
     }
 
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    // Re-read from the system whenever the service reports anything and on every resume, so what
+    // this shows is the setting as it is now, not what the service last believed it wrote.
+    val grayscale = remember(state, resumeCount) { viewModel.grayscaleSnapshot() }
 
     Scaffold(
         topBar = {
@@ -171,20 +171,31 @@ fun DiagnosticsScreen(
             }
 
             item {
-                DiagnosticsCard(title = "Weekly reflection prompt") {
-                    LabelValueRow("Prompt", if (weeklyPromptEnabled) "On" else "Off")
-                    LabelValueRow("Notifications can be shown", weeklyBlockedReason?.let { "NO - $it" } ?: "Yes")
+                DiagnosticsCard(title = "Grayscale (colour correction)") {
+                    LabelValueRow("WRITE_SECURE_SETTINGS", if (grayscale.permissionGranted) "Granted" else "NOT granted (grant over adb to use grayscale)")
                     LabelValueRow(
-                        "Last weekly run",
-                        weeklyLastRun?.let { run ->
-                            val at = SimpleDateFormat("EEE d MMM HH:mm", Locale.getDefault()).format(Date(run.atMillis))
-                            "$at - ${run.result.description}" + (run.detail?.let { " ($it)" } ?: "")
-                        } ?: "(not run yet)",
+                        "Grayscale on screen right now (read from the system)",
+                        when {
+                            grayscale.system == null -> "(could not read the setting)"
+                            grayscale.system.isGrayscale -> "Yes"
+                            grayscale.system.enabled -> "No - colour correction is on in mode ${grayscale.system.mode ?: "unset"}, not grayscale"
+                            else -> "No"
+                        },
                     )
+                    LabelValueRow(
+                        "Applied by this app",
+                        grayscale.appliedByApp?.let { "Yes (will restore mode ${it.previousMode ?: "unset"})" } ?: "No",
+                    )
+                    LabelValueRow("Applied / restored (read back)", "${state.grayscaleAppliedCount} / ${state.grayscaleRestoredCount}")
+                    LabelValueRow("Last apply", state.lastGrayscaleApply ?: "(none yet)")
+                    LabelValueRow("Last restore", state.lastGrayscaleRestore ?: "(none yet)")
+                    LabelValueRow("Last skipped", state.lastGrayscaleSkip ?: "(none)")
+                    LabelValueRow("Last grayscale error", state.lastGrayscaleError ?: "(none)")
                     Text(
-                        "Runs once a week while the prompt is on. \"Posted\" alone means Android " +
-                            "accepted it; \"showing\" means it was in the notification shade " +
-                            "straight afterwards.",
+                        "\"On screen right now\" is read from Android's settings, not from this app's own " +
+                            "record. If it says Yes while no monitored app with grayscale is in front, the " +
+                            "restore did not happen - \"last grayscale error\" says why. Colour correction " +
+                            "turned on outside this app is never changed.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )

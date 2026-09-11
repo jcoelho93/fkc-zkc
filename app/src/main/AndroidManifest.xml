@@ -13,16 +13,20 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Re-enqueues the WorkManager periodic jobs after a reboot; nothing more. -->
+    <!-- Re-enqueues the WorkManager periodic reset job after a reboot; nothing more. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
-      Opt-in only: the weekly reflection prompt (#6, #33), one low-importance notification a
-      week. Off by default, and requested at runtime (Android 13+) only when the user switches
-      the prompt on in Settings. Declining changes nothing else - the reflection is in the app
-      either way. It is the only notification the app ever posts.
+      Optional grayscale (#27). Used ONLY to switch the system's colour correction to grayscale
+      while a monitored app with grayscale switched on is in front, and back afterwards - the two
+      Settings.Secure keys in grayscale/DaltonizerSettings.kt, nothing else. Android cannot grant
+      it from the phone: it is signature|privileged|development, so the only way to hold it is
+      `adb shell pm grant com.mindfulscroll.app android.permission.WRITE_SECURE_SETTINGS`. Without
+      that the feature is inert and the rest of the app is unaffected.
     -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!--
       Deliberately NOT declared, ever:

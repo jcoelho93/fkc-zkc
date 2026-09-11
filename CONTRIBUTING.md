@@ -77,6 +77,25 @@ real non-zero-sized frame appeared. When the two diverge, **last overlay render*
 happened instead — each window gets two seconds to produce a frame and files its own complaint
 if none arrives.
 
+**Grayscale** (#27) follows the same attempted-versus-worked rule. *On screen right now* is read
+live from `Settings.Secure`, not from the app's own record, and the applied/restored counters
+only move once the setting has been read back as changed. It uses the system's colour
+correction (the daltonizer) in monochromacy mode, because a third-party app has no other way to
+desaturate another app's window. That setting is display-wide and persistent, so the one failure
+worth designing against is the service dying with the screen gray. The app records that the
+grayscale is *its* before writing it (`GrayscaleController`), and restores on connect, unbind,
+interrupt, destroy and boot. It never overwrites colour correction the user turned on
+themselves, and it only undoes a setting that still reads exactly as it wrote it. The decision
+logic is `GrayscalePolicy`, a pure object with its own unit tests. To try it locally:
+
+```sh
+adb shell pm grant com.mindfulscroll.app.debug android.permission.WRITE_SECURE_SETTINGS
+```
+
+`adb screencap` comes out in full colour whether or not grayscale is on, because the colour
+matrix is applied after the screenshot buffer. Check the Diagnostics card, or
+`adb shell settings get secure accessibility_display_daltonizer_enabled`, instead.
+
 ## Building
 
 Requires **JDK 17** and the Android SDK. Min SDK 26 (Android 8.0), compile/target SDK 35.

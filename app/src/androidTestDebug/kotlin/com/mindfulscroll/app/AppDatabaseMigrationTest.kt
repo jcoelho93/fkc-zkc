@@ -12,6 +12,7 @@ import com.mindfulscroll.app.data.MIGRATION_1_2
 import com.mindfulscroll.app.data.MIGRATION_2_3
 import com.mindfulscroll.app.data.MIGRATION_3_4
 import com.mindfulscroll.app.data.MIGRATION_4_5
+import com.mindfulscroll.app.data.MIGRATION_5_6
 import com.mindfulscroll.app.data.entity.IntentionEntity
 import com.mindfulscroll.app.data.entity.IntentionKind
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
@@ -314,6 +315,56 @@ class AppDatabaseMigrationTest {
             // Writable, and a day created after the migration counts from zero.
             db.dailyAppStatDao().upsert(migrated.copy(dateEpochDay = 20001, openCount = 3))
             assertEquals(3, db.dailyAppStatDao().get("com.instagram.android", 20001)!!.openCount)
+        }
+        db.close()
+    }
+
+    /**
+     * Grayscale (#27): monitored_apps gains a per-app opt-in, NOT NULL DEFAULT 0.
+     *
+     * Every existing app must keep its thresholds and monitored switch - monitored_apps was
+     * dropped outright once before (MIGRATION_2_3), so "config survives" is worth pinning - and
+     * must come through with grayscale off, since nobody opted into a feature that did not exist.
+     */
+    @Test
+    fun migrate5To6_addsGrayscaleOffForEveryExistingApp() {
+        val dbName = "migration-5-6-test.db"
+
+        helper.createDatabase(dbName, 5).use { db ->
+            db.execSQL(
+                "INSERT INTO monitored_apps " +
+                    "(packageName, appLabel, isMonitored, scrollThreshold, timeThresholdMinutes, addedAtMillis) " +
+                    "VALUES ('com.instagram.android', 'Instagram', 0, 55, 7, 1234)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 6, true, MIGRATION_5_6).use { db ->
+            assertEquals(
+                "the v5 monitored_apps row did not survive a migration that only adds a column",
+                1,
+                db.countRows("monitored_apps"),
+            )
+        }
+
+        val db = Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            dbName,
+        ).addMigrations(*ALL_MIGRATIONS).build()
+
+        runBlocking {
+            val migrated = db.monitoredAppDao().get("com.instagram.android")
+            assertNotNull("the v5 app could not be read back through Room at v6", migrated)
+            assertEquals("Instagram", migrated!!.appLabel)
+            assertEquals(false, migrated.isMonitored)
+            assertEquals(55, migrated.scrollThreshold)
+            assertEquals(7, migrated.timeThresholdMinutes)
+            assertEquals(1234L, migrated.addedAtMillis)
+            assertEquals("an app from before grayscale existed must come through with it off", false, migrated.grayscaleEnabled)
+
+            // Writable, not merely present.
+            db.monitoredAppDao().update(migrated.copy(grayscaleEnabled = true))
+            assertEquals(true, db.monitoredAppDao().get("com.instagram.android")!!.grayscaleEnabled)
         }
         db.close()
     }
