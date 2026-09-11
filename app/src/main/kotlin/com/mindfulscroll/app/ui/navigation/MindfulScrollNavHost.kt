@@ -12,6 +12,7 @@ import com.mindfulscroll.app.ui.appselection.AppSelectionScreen
 import com.mindfulscroll.app.ui.home.MainScreen
 import com.mindfulscroll.app.ui.onboarding.PermissionScreen
 import com.mindfulscroll.app.ui.onboarding.WelcomeScreen
+import com.mindfulscroll.app.ui.settings.GrayscaleSettingsScreen
 import com.mindfulscroll.app.ui.settings.IntentionCaptureSettingsScreen
 import com.mindfulscroll.app.ui.settings.PauseLengthSettingsScreen
 import com.mindfulscroll.app.ui.settings.ThresholdEditorScreen
@@ -57,6 +58,12 @@ fun MindfulScrollNavHost(navController: NavHostController = rememberNavControlle
         }
         composable(Routes.SETTINGS_INTENTION) {
             IntentionCaptureSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS_GRAYSCALE) {
+            GrayscaleSettingsScreen(
+                onBack = { navController.popBackStack() },
+                onChooseApps = { navController.navigate(Routes.EDIT_MONITORED_APPS) },
+            )
         }
         composable(Routes.SETTINGS_PAUSE_LENGTH) {
             PauseLengthSettingsScreen(onBack = { navController.popBackStack() })

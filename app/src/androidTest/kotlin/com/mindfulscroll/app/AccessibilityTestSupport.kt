@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.mindfulscroll.app.accessibility.DiagnosticsEntryPoint
 import com.mindfulscroll.app.accessibility.ServiceDiagnostics
+import com.mindfulscroll.app.data.repository.MonitoredAppRepository
 import com.mindfulscroll.app.overlay.OverlayController
 import dagger.hilt.android.EntryPointAccessors
 
@@ -108,6 +109,8 @@ class AccessibilityServiceHarness {
     val diagnostics: ServiceDiagnostics = entryPoint.serviceDiagnostics()
 
     val overlayController: OverlayController = entryPoint.overlayController()
+
+    val monitoredAppRepository: MonitoredAppRepository = entryPoint.monitoredAppRepository()
 
     /** @return true if the service connected within [timeoutMillis]. */
     fun enableServiceAndAwaitConnection(timeoutMillis: Long = 30_000): Boolean {

@@ -1,6 +1,9 @@
 package com.mindfulscroll.app
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -13,6 +16,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.ui.navigation.Routes
+import com.mindfulscroll.app.ui.settings.GrayscaleSettings
 import com.mindfulscroll.app.ui.settings.SettingsMenu
 import com.mindfulscroll.app.ui.settings.ThresholdEditor
 import com.mindfulscroll.app.ui.settings.ThresholdList
@@ -48,9 +52,10 @@ class SettingsScreensTest {
         var diagnostics = 0
         compose.setContent {
             SettingsMenu(
-                apps = listOf(app("a", "Instagram"), app("b", "Reddit", minutes = 15)),
+                apps = listOf(app("a", "Instagram").copy(grayscaleEnabled = true), app("b", "Reddit", minutes = 15)),
                 intentionCaptureEnabled = false,
                 pauseDurationSeconds = 25,
+                grayscalePermissionGranted = true,
                 onOpenPage = { opened += it },
                 onOpenDiagnostics = { diagnostics++ },
             )
@@ -61,8 +66,10 @@ class SettingsScreensTest {
         compose.onNodeWithText("25 sec").assertIsDisplayed()
         compose.onNodeWithText("Per app").assertIsDisplayed()
         compose.onNodeWithText("2 apps").assertIsDisplayed()
+        compose.onNodeWithText("1 app").assertIsDisplayed() // grayscale
 
         compose.onNodeWithText("Ask what I'm looking for").performClick()
+        compose.onNodeWithText("Grayscale").performClick()
         compose.onNodeWithText("Pause length").performClick()
         compose.onNodeWithText("When the pause appears").performClick()
         compose.onNodeWithText("Monitored apps").performClick()
@@ -71,6 +78,7 @@ class SettingsScreensTest {
         assertEquals(
             listOf(
                 Routes.SETTINGS_INTENTION,
+                Routes.SETTINGS_GRAYSCALE,
                 Routes.SETTINGS_PAUSE_LENGTH,
                 Routes.SETTINGS_THRESHOLDS,
                 Routes.EDIT_MONITORED_APPS,
@@ -87,6 +95,7 @@ class SettingsScreensTest {
                 apps = listOf(app("a", "Instagram"), app("b", "Reddit")),
                 intentionCaptureEnabled = true,
                 pauseDurationSeconds = 20,
+                grayscalePermissionGranted = false,
                 onOpenPage = {},
                 onOpenDiagnostics = {},
             )
@@ -143,5 +152,39 @@ class SettingsScreensTest {
         // SetProgress runs onValueChange and then onValueChangeFinished, so each drag saves once
         // with both current values.
         assertEquals(listOf(100 to 10, 100 to 25), saved)
+    }
+
+    /**
+     * Grayscale (#27): the toggle is on the page one tap from the menu, and without the adb grant
+     * the page shows the exact command and says the switches do nothing yet - a switch that
+     * silently has no effect is the thing this page must never look like.
+     */
+    @Test
+    fun grayscalePageShowsTheSetupCommandUntilGrantedAndTogglesPerApp() {
+        val toggled = mutableListOf<Pair<String, Boolean>>()
+        var granted by mutableStateOf(false)
+        compose.setContent {
+            Column {
+                GrayscaleSettings(
+                    apps = listOf(app("com.instagram.android", "Instagram"), app("com.reddit.frontpage", "Reddit").copy(grayscaleEnabled = true)),
+                    permissionGranted = granted,
+                    grantCommand = "adb shell pm grant com.mindfulscroll.app android.permission.WRITE_SECURE_SETTINGS",
+                    onGrayscaleChange = { pkg, on -> toggled += pkg to on },
+                    onChooseApps = {},
+                )
+            }
+        }
+
+        compose.onNodeWithText("adb shell pm grant com.mindfulscroll.app android.permission.WRITE_SECURE_SETTINGS").assertIsDisplayed()
+        compose.onNodeWithText("have no effect", substring = true).assertIsDisplayed()
+
+        val switches = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState))
+        switches[0].performClick()
+        switches[1].performClick()
+        assertEquals(listOf("com.instagram.android" to true, "com.reddit.frontpage" to false), toggled)
+
+        granted = true
+        compose.waitForIdle()
+        assertEquals(0, compose.onAllNodesWithText("adb shell", substring = true).fetchSemanticsNodes().size)
     }
 }

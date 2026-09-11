@@ -52,6 +52,11 @@ class MonitoredAppRepository @Inject constructor(
         if (removed.isNotEmpty()) dao.deleteByPackageNames(removed.toList())
     }
 
+    suspend fun setGrayscaleEnabled(packageName: String, enabled: Boolean) {
+        val existing = dao.get(packageName) ?: return
+        dao.update(existing.copy(grayscaleEnabled = enabled))
+    }
+
     suspend fun updateThresholds(
         packageName: String,
         scrollThreshold: Int,

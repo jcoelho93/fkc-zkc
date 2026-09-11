@@ -123,6 +123,20 @@ data class ServiceDiagnosticsState(
      * user, and a single number would hide which half people actually engage with.
      */
     val pauseOutcomesAnsweredCount: Long = 0,
+    /**
+     * Grayscale (#27). Counted only once the system setting was READ BACK as changed, not when the
+     * write returned: a write that silently does nothing would otherwise look like a working feature.
+     * Whether grayscale is on right now is read live from Settings.Secure by the Diagnostics screen,
+     * not from here.
+     */
+    val grayscaleAppliedCount: Long = 0,
+    val grayscaleRestoredCount: Long = 0,
+    val lastGrayscaleApply: String? = null,
+    val lastGrayscaleRestore: String? = null,
+    /** Why grayscale was deliberately not applied last time - permission missing, or the user's own colour correction. */
+    val lastGrayscaleSkip: String? = null,
+    /** A write that threw or did not read back, including "on, and can no longer be turned off". */
+    val lastGrayscaleError: String? = null,
     /** Newest first, capped - enough to see what just happened without adb. */
     val recentLog: List<String> = emptyList(),
 ) {

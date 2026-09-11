@@ -22,6 +22,7 @@ object Routes {
     const val SETTINGS_INTENTION = "main/settings/intention"
     const val SETTINGS_PAUSE_LENGTH = "main/settings/pause-length"
     const val SETTINGS_THRESHOLDS = "main/settings/thresholds"
+    const val SETTINGS_GRAYSCALE = "main/settings/grayscale"
 
     const val ARG_PACKAGE_NAME = "packageName"
     const val SETTINGS_THRESHOLD_EDITOR = "main/settings/thresholds/{$ARG_PACKAGE_NAME}"
