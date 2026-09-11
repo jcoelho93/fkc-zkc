@@ -25,7 +25,8 @@ import java.time.ZonedDateTime
 /**
  * The weekly job exists exactly while the prompt is on, survives a reboot, and first fires on
  * Sunday evening. A plain Application, not the Hilt one: these tests need WorkManager, not the
- * graph.
+ * graph. That is why the reboot tests call [BootRescheduleReceiver.rescheduleWork] rather than
+ * onReceive, whose grayscale restore needs the graph.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33], application = Application::class)
@@ -84,7 +85,7 @@ class WeeklyReflectionSchedulingTest {
     fun `after a reboot the weekly job is re-armed while the prompt is on`() {
         AppSettings(context).setWeeklyReflectionPromptEnabled(true)
 
-        BootRescheduleReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        BootRescheduleReceiver.rescheduleWork(context)
 
         assertThat(activeWeeklyWork()).hasSize(1)
     }
@@ -93,7 +94,7 @@ class WeeklyReflectionSchedulingTest {
     fun `after a reboot nothing is scheduled while the prompt is off`() {
         AppSettings(context).setWeeklyReflectionPromptEnabled(false)
 
-        BootRescheduleReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        BootRescheduleReceiver.rescheduleWork(context)
 
         assertThat(weeklyWork()).isEmpty()
     }

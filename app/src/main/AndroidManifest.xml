@@ -13,7 +13,7 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Re-enqueues the WorkManager periodic reset job after a reboot; nothing more. -->
+    <!-- Re-enqueues the WorkManager periodic jobs after a reboot; nothing more. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
@@ -27,6 +27,14 @@
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
+
+    <!--
+      Opt-in only: the weekly reflection prompt (#6, #33), one low-importance notification a
+      week. Off by default, and requested at runtime (Android 13+) only when the user switches
+      the prompt on in Settings. Declining changes nothing else - the reflection is in the app
+      either way. It is the only notification the app ever posts.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
       Deliberately NOT declared, ever:
