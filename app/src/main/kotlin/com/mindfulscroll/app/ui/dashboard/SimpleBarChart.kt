@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -31,6 +32,8 @@ fun SimpleBarChart(
     barColor: Color = MaterialTheme.colorScheme.primary,
     modifier: Modifier = Modifier,
     chartHeight: androidx.compose.ui.unit.Dp = 120.dp,
+    /** Smaller for category names (the reflection's intentions), which run longer than "Mon". */
+    labelStyle: TextStyle = MaterialTheme.typography.bodyMedium,
 ) {
     val maxValue = (bars.maxOfOrNull { it.second ?: 0 } ?: 0).coerceAtLeast(1)
 
@@ -67,7 +70,7 @@ fun SimpleBarChart(
                 }
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = labelStyle,
                     textAlign = TextAlign.Center,
                 )
             }

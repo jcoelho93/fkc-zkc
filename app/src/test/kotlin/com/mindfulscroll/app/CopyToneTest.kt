@@ -84,7 +84,8 @@ class CopyToneTest {
         /** Gradle runs unit tests with the module directory as the working directory. */
         val SOURCE_ROOT = File("src/main/kotlin/com/mindfulscroll/app")
 
-        val USER_FACING_DIRS = listOf("ui", "overlay", "intention")
+        /** "reflection" holds the weekly notification's text, which reaches the user outside the app. */
+        val USER_FACING_DIRS = listOf("ui", "overlay", "intention", "reflection")
 
         val EXCLUDED_DIRS = listOf("ui/diagnostics")
 

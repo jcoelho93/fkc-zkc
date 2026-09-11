@@ -8,6 +8,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -58,11 +61,13 @@ class SettingsScreensTest {
                 grayscalePermissionGranted = true,
                 onOpenPage = { opened += it },
                 onOpenDiagnostics = { diagnostics++ },
+                weeklyReflectionPromptEnabled = true,
             )
         }
 
         // The values answer the question without opening anything.
         compose.onNodeWithText("Off").assertIsDisplayed()
+        compose.onNodeWithText("On").assertIsDisplayed()
         compose.onNodeWithText("25 sec").assertIsDisplayed()
         compose.onNodeWithText("Per app").assertIsDisplayed()
         compose.onNodeWithText("2 apps").assertIsDisplayed()
@@ -72,7 +77,9 @@ class SettingsScreensTest {
         compose.onNodeWithText("Grayscale").performClick()
         compose.onNodeWithText("Pause length").performClick()
         compose.onNodeWithText("When the pause appears").performClick()
+        compose.onNodeWithText("Weekly reflection prompt").performClick()
         compose.onNodeWithText("Monitored apps").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Diagnostics"))
         compose.onNodeWithText("Diagnostics").performClick()
 
         assertEquals(
@@ -81,6 +88,7 @@ class SettingsScreensTest {
                 Routes.SETTINGS_GRAYSCALE,
                 Routes.SETTINGS_PAUSE_LENGTH,
                 Routes.SETTINGS_THRESHOLDS,
+                Routes.SETTINGS_WEEKLY_REFLECTION,
                 Routes.EDIT_MONITORED_APPS,
             ),
             opened,

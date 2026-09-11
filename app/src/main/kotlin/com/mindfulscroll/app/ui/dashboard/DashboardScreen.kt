@@ -1,5 +1,6 @@
 package com.mindfulscroll.app.ui.dashboard
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
+fun DashboardScreen(
+    onOpenReflection: () -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
 
     LazyColumn(
@@ -85,6 +89,23 @@ fun DashboardScreen(viewModel: DashboardViewModel = hiltViewModel()) {
         }
         item {
             OverlayOutcomeCard(state.overlayOutcomes)
+        }
+
+        // Needs no permission and no setting: the weekly notification only points here.
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenReflection),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Weekly reflection", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "What you said when opening each app, next to what you felt you got.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
         }
     }
 }

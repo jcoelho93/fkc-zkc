@@ -22,6 +22,9 @@ interface OverlayEventDao {
     @Query("SELECT * FROM overlay_events WHERE dateEpochDay BETWEEN :startEpochDay AND :endEpochDay ORDER BY shownAtMillis DESC")
     fun observeForDayRange(startEpochDay: Long, endEpochDay: Long): Flow<List<OverlayEventEntity>>
 
+    @Query("SELECT * FROM overlay_events WHERE dateEpochDay BETWEEN :startEpochDay AND :endEpochDay")
+    suspend fun getForDayRange(startEpochDay: Long, endEpochDay: Long): List<OverlayEventEntity>
+
     @Query("DELETE FROM overlay_events WHERE dateEpochDay < :cutoffEpochDay")
     suspend fun deleteOlderThan(cutoffEpochDay: Long)
 }

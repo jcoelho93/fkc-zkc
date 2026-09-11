@@ -72,7 +72,9 @@ fun MainScreen(onOpenPage: (route: String) -> Unit = {}) {
             startDestination = Routes.DASHBOARD,
             modifier = Modifier.padding(padding),
         ) {
-            composable(Routes.DASHBOARD) { DashboardScreen() }
+            composable(Routes.DASHBOARD) {
+                DashboardScreen(onOpenReflection = { onOpenPage(Routes.REFLECTION) })
+            }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) },

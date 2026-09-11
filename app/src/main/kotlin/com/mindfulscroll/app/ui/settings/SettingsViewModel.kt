@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.mindfulscroll.app.data.AppSettings
 import com.mindfulscroll.app.data.entity.MonitoredAppEntity
 import com.mindfulscroll.app.data.repository.MonitoredAppRepository
+import com.mindfulscroll.app.reflection.WeeklyPromptToggle
+import com.mindfulscroll.app.reflection.WeeklyReflectionPrompt
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +18,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val monitoredAppRepository: MonitoredAppRepository,
     private val appSettings: AppSettings,
+    private val weeklyReflectionPrompt: WeeklyReflectionPrompt,
 ) : ViewModel() {
 
     val apps: StateFlow<List<MonitoredAppEntity>> = monitoredAppRepository.observeAll()
@@ -25,6 +28,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setIntentionCaptureEnabled(enabled: Boolean) {
         appSettings.setIntentionCaptureEnabled(enabled)
+    }
+
+    val isWeeklyReflectionPromptEnabled: StateFlow<Boolean> = appSettings.isWeeklyReflectionPromptEnabled
+
+    /** Takes the already-decided action - see WeeklyPromptToggle for when the permission is asked. */
+    internal fun applyWeeklyPromptAction(action: WeeklyPromptToggle.Action) {
+        when (action) {
+            WeeklyPromptToggle.Action.TURN_ON -> weeklyReflectionPrompt.setEnabled(true)
+            WeeklyPromptToggle.Action.TURN_OFF -> weeklyReflectionPrompt.setEnabled(false)
+            // The screen launches the system dialog; there is nothing to store until it answers.
+            WeeklyPromptToggle.Action.REQUEST_PERMISSION -> Unit
+        }
     }
 
     val pauseDurationSeconds: StateFlow<Int> = appSettings.pauseDurationSeconds

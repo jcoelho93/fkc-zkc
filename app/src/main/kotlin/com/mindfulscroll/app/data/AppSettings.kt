@@ -70,7 +70,36 @@ class AppSettings @Inject constructor(
         _pauseDurationSeconds.value = clamped
     }
 
+    private val _isWeeklyReflectionPromptEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_WEEKLY_REFLECTION_PROMPT, DEFAULT_WEEKLY_REFLECTION_PROMPT),
+    )
+
+    /**
+     * Whether a notification says, once a week, that the reflection is there to look at (#6,
+     * #33). The reflection itself is always in the app; this only decides whether anything points
+     * at it.
+     */
+    val isWeeklyReflectionPromptEnabled: StateFlow<Boolean> = _isWeeklyReflectionPromptEnabled.asStateFlow()
+
+    fun weeklyReflectionPromptEnabledNow(): Boolean =
+        prefs.getBoolean(KEY_WEEKLY_REFLECTION_PROMPT, DEFAULT_WEEKLY_REFLECTION_PROMPT)
+
+    /** Use WeeklyReflectionPrompt.setEnabled, which also schedules or cancels the weekly job. */
+    fun setWeeklyReflectionPromptEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(KEY_WEEKLY_REFLECTION_PROMPT, enabled) }
+        _isWeeklyReflectionPromptEnabled.value = enabled
+    }
+
     companion object {
+        private const val KEY_WEEKLY_REFLECTION_PROMPT = "weekly_reflection_prompt_enabled"
+
+        /**
+         * Off by default, unlike everything else here. It is the one feature that reaches the
+         * user outside a monitored app, and it needs a permission that the app otherwise never
+         * asks for, so it waits until someone asks for it.
+         */
+        private const val DEFAULT_WEEKLY_REFLECTION_PROMPT = false
+
         private const val KEY_INTENTION_CAPTURE = "intention_capture_enabled"
 
         /** On by default: the feature is the point of the app, and it is one tap to turn off. */

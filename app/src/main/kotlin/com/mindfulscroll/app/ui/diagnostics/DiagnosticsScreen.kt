@@ -56,6 +56,9 @@ fun DiagnosticsScreen(
         mutableStateOf(UsageAccessChecker.isUsageAccessGranted(context))
     }
     var resumeCount by remember { mutableStateOf(0) }
+    val weeklyPromptEnabled by viewModel.weeklyPromptEnabled.collectAsState()
+    var weeklyLastRun by remember { mutableStateOf(viewModel.weeklyLastRun()) }
+    var weeklyBlockedReason by remember { mutableStateOf(viewModel.weeklyBlockedReason()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -63,6 +66,8 @@ fun DiagnosticsScreen(
                 accessibilityGranted = AccessibilityPermissionChecker.isScrollMonitorServiceEnabled(context)
                 usageAccessGranted = UsageAccessChecker.isUsageAccessGranted(context)
                 resumeCount++
+                weeklyLastRun = viewModel.weeklyLastRun()
+                weeklyBlockedReason = viewModel.weeklyBlockedReason()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -196,6 +201,27 @@ fun DiagnosticsScreen(
                             "record. If it says Yes while no monitored app with grayscale is in front, the " +
                             "restore did not happen - \"last grayscale error\" says why. Colour correction " +
                             "turned on outside this app is never changed.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+
+            item {
+                DiagnosticsCard(title = "Weekly reflection prompt") {
+                    LabelValueRow("Prompt", if (weeklyPromptEnabled) "On" else "Off")
+                    LabelValueRow("Notifications can be shown", weeklyBlockedReason?.let { "NO - $it" } ?: "Yes")
+                    LabelValueRow(
+                        "Last weekly run",
+                        weeklyLastRun?.let { run ->
+                            val at = SimpleDateFormat("EEE d MMM HH:mm", Locale.getDefault()).format(Date(run.atMillis))
+                            "$at - ${run.result.description}" + (run.detail?.let { " ($it)" } ?: "")
+                        } ?: "(not run yet)",
+                    )
+                    Text(
+                        "Runs once a week while the prompt is on. \"Posted\" alone means Android " +
+                            "accepted it; \"showing\" means it was in the notification shade " +
+                            "straight afterwards.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
