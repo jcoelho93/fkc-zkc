@@ -80,3 +80,32 @@ jobs:
           name: test-reports
           path: app/build/reports/tests
           retention-days: 7
+
+      # `instrumented-tests (release)` does not run the shipped APK: its keep rules hold kotlin.**
+      # and kotlinx.coroutines.** whole (#9). This re-runs R8 with those rules and prints how far
+      # apart the two builds are, so the gap is a number on every PR rather than a comment that
+      # rots. Only R8 and dexing re-run, and this job still finishes well inside the instrumented
+      # jobs' wall time. It can fail only if that build fails, and the release instrumented job
+      # runs the same build, so it cannot fail a PR that would otherwise pass.
+      #
+      # Last on purpose: the rebuild overwrites app/build/outputs/mapping/release, which the
+      # r8-release-mapping upload above has already archived as the SHIPPED build's.
+      - name: Measure the instrumented-release R8 gap
+        run: |
+          set -euo pipefail
+          gap="$RUNNER_TEMP/r8-gap"
+          mkdir -p "$gap"
+          cp app/build/outputs/mapping/release/usage.txt "$gap/shipped-usage.txt"
+          cp app/build/outputs/mapping/release/mapping.txt "$gap/shipped-mapping.txt"
+          ./gradlew assembleRelease -Pmindfulscroll.testBuildType=release
+          cp app/build/outputs/mapping/release/usage.txt "$gap/instrumented-usage.txt"
+          chmod +x .github/scripts/r8_instrumentation_gap.sh
+          ./.github/scripts/r8_instrumentation_gap.sh \
+            "$gap/shipped-usage.txt" "$gap/instrumented-usage.txt" "$gap/shipped-mapping.txt" \
+            | tee "$gap/report.txt"
+          {
+            echo '## R8 gap: shipped vs instrumented release'
+            echo '```'
+            cat "$gap/report.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

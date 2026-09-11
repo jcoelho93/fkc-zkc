@@ -122,6 +122,37 @@ APK can. Does the system still resolve the full event mask (asserted to be exact
 fails as quietly as an empty one), and does the `TYPE_ACCESSIBILITY_OVERLAY` window still draw?
 Keep rules in `app/proguard-rules.pro` each name the specific thing that breaks without them.
 
+**But the release run does not test the shipped APK.** While the release variant is being
+instrumented, `app/proguard-rules-instrumentation.pro` keeps `kotlin.**` and
+`kotlinx.coroutines.**` whole, because the test APK resolves them against the app APK. Measured
+on `main` @ `c083fc0` (fully-removed classes only):
+
+| | classes |
+|---|---|
+| Removed in the shipped build, **kept** in the instrumented one | **1,579** |
+| of which `kotlin.*` (stdlib) | 777 |
+| of which `kotlinx.coroutines.*`, which the threshold timer runs on | 605 |
+| of which `androidx.compose.*` / other `androidx.*` | 135 / 48 |
+| of which the app's own classes | 10 |
+| Removed in the instrumented build, kept in the shipped one | 119 |
+
+Keeping the stdlib and coroutines whole changes R8's optimisation decisions, not only what
+survives, so even the app's own code differs: `SessionState` and `ThresholdConfig` are
+class-inlined in the shipped build and real objects in the instrumented one. So the release run
+proves the resolved event mask and that the overlay draws with everything minified. It does
+**not** catch R8 stripping a stdlib or coroutines class the app needs, or a failure that exists
+only in the shipped optimisation shape. Nothing automated runs the shipped APK;
+`verify_release_apk.sh` inspects it statically.
+
+The `build` job prints this table to its summary on every PR. Re-measure locally after any
+dependency, AGP, Kotlin or keep-rule change:
+
+```bash
+.github/scripts/r8_instrumentation_gap.sh   # builds both variants, then diffs usage.txt
+```
+
+The full breakdown and reasoning live in the header of `app/proguard-rules-instrumentation.pro`.
+
 Locally, the release variant runs with:
 
 ```bash
