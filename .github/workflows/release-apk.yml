@@ -69,9 +69,10 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      # A wrong secret produces an APK that installs but can never update the one already on the
-      # phone (signature mismatch), which is painful to discover later. Fail here instead.
-      - name: Verify the APK is signed with the release key
+      # Missing secrets produce an unsigned APK, which is named differently and so is absent here.
+      # Whether it is signed by the RIGHT key is the next step's job: a wrong secret produces an APK
+      # that installs but can never update the one already on the phone (signature mismatch).
+      - name: Verify the build produced a signed APK
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/release/app-release.apk
@@ -85,18 +86,28 @@ jobs:
       # The signed artifact people actually install. Published alongside the APK rather than left
       # in the job log on purpose: a passing check nobody outside the repo can see proves nothing
       # to the stranger being asked to grant an accessibility service.
+      #
+      # REQUIRE_SIGNED=1 makes section 5 assert the APK's certificate SHA-256 equals the one the
+      # README publishes, exactly. A release signed by any other key fails here, before it is
+      # published, instead of shipping with a published fingerprint that is no longer true.
+      # Section 6 is the Exodus Privacy tracker scan.
       - name: Verify the signed APK's safety claims
+        env:
+          REQUIRE_SIGNED: '1'
         run: |
+          set -uo pipefail
           chmod +x .github/scripts/verify_release_apk.sh
+          status=0
           ./.github/scripts/verify_release_apk.sh \
             app/build/outputs/apk/release/app-release.apk \
-            verification-report.txt
+            verification-report.txt || status=$?
           {
             echo '## Release APK verification'
             echo '```'
             cat verification-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -117,8 +128,11 @@ jobs:
 
             **`verification-report.txt`** attached below is generated from this exact APK. It lists
             every permission it holds, shows that `INTERNET` is absent, that the accessibility
-            service cannot read screen content, and that no networking code survives in the
-            compiled app. You do not have to take the README's word for any of it.
+            service cannot read screen content, that no networking code survives in the compiled
+            app, that Exodus Privacy's scanner finds no known trackers, and that the APK is signed
+            by the certificate published in the README. You do not have to take the README's word
+            for any of it: the README's *Don't trust us, check it* section shows how to check the
+            copy on your own phone.
           files: |
             app/build/outputs/apk/release/app-release.apk
             verification-report.txt

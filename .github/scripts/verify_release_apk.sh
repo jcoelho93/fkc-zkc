@@ -7,10 +7,17 @@
 # actually install, after R8, and writes a report a non-programmer can read.
 #
 # Usage: verify_release_apk.sh <path-to-apk> [report-output-path]
+#   REQUIRE_SIGNED=1  fail unless the APK is signed by the certificate published in the README
+#                     (set by the release workflow; PR builds are unsigned)
+#
+# No `set -e`, deliberately: every check runs and records PASS/FAIL, and the exit status is the
+# accumulated $FAILED, so one failure does not hide the others from the report.
 set -uo pipefail
 
 APK="${1:?usage: verify_release_apk.sh <apk> [report]}"
 REPORT="${2:-verification-report.txt}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 BUILD_TOOLS="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" -maxdepth 1 -type d | sort -r | head -1)"
 AAPT2="$BUILD_TOOLS/aapt2"
@@ -175,13 +182,65 @@ say ""
 # 5. Signing identity, when the APK is signed.
 # ---------------------------------------------------------------------------
 say "5. Signing identity"
+# The fingerprint a stranger compares against is the one in the README, so that is what a signed
+# APK is checked against - not a second copy kept here that could drift from what is published.
+# A release signed by any other key (a wrong secret, a rotated or stolen key) fails, instead of
+# shipping an APK whose published fingerprint quietly stopped being true.
+PUBLISHED_CERT="$(grep -A1 -F '<!-- release-cert-sha256 -->' "$REPO_ROOT/README.md" \
+    | grep -oE '\b[0-9a-f]{64}\b' || true)"
+if [ "$(printf '%s' "$PUBLISHED_CERT" | grep -c .)" != "1" ]; then
+    fail "README.md must publish exactly one fingerprint on the line after <!-- release-cert-sha256 -->"
+fi
+say "  published in the README:        ${PUBLISHED_CERT:-<none>}"
+# The README also prints it colon-separated, the form AppVerifier and keytool use. Every copy must be
+# the same certificate, or a reader comparing against the "wrong" one would be misled.
+for other in $(grep -oE '\b([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}\b' "$REPO_ROOT/README.md" \
+        | tr -d ':' | tr 'A-F' 'a-f' | sort -u); do
+    if [ "$other" != "$PUBLISHED_CERT" ]; then
+        fail "README.md also shows a different fingerprint: $other"
+    fi
+done
+
 APKSIGNER="$BUILD_TOOLS/apksigner"
-if [ -x "$APKSIGNER" ] && "$APKSIGNER" verify --print-certs "$APK" > /tmp/certs.txt 2>/dev/null; then
-    FINGERPRINT="$(sed -n 's/.*certificate SHA-256 digest: \(.*\)/\1/p' /tmp/certs.txt | head -1)"
-    say "  release certificate SHA-256: $FINGERPRINT"
-    pass "APK is signed - compare this fingerprint against the one published in the README"
+CERTS="$(mktemp)"
+if [ ! -x "$APKSIGNER" ]; then
+    fail "apksigner not found under $BUILD_TOOLS, so the signature was not checked"
+elif "$APKSIGNER" verify --print-certs "$APK" > "$CERTS" 2>&1; then
+    SIGNERS="$(grep -cE '^Signer #[0-9]+ certificate SHA-256 digest:' "$CERTS" || true)"
+    FINGERPRINT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: \([0-9a-f]*\)$/\1/p' "$CERTS")"
+    say "  this APK's certificate SHA-256: ${FINGERPRINT:-<unreadable>}"
+    if [ "$SIGNERS" = "1" ] && [ -n "$FINGERPRINT" ] && [ "$FINGERPRINT" = "$PUBLISHED_CERT" ]; then
+        pass "signed by exactly one certificate, the one published in the README"
+    else
+        fail "signed by $SIGNERS certificate(s), and not by the one published in the README"
+    fi
+elif [ "${REQUIRE_SIGNED:-0}" = "1" ]; then
+    fail "APK is not signed, and a release must be: $(head -1 "$CERTS")"
 else
-    say "  unsigned (expected for PR builds; release builds are signed)"
+    say "  unsigned: expected for pull-request builds. Releases run this with REQUIRE_SIGNED=1,"
+    say "  which fails unless the certificate matches the README's fingerprint exactly."
+fi
+rm -f "$CERTS"
+say ""
+
+# ---------------------------------------------------------------------------
+# 6. Known trackers, checked by a third party's scanner.
+# ---------------------------------------------------------------------------
+say "6. Known trackers (Exodus Privacy)"
+# Exodus Privacy's own analyser and tracker database, not ours: the check a sceptical reader is most
+# likely to already trust. It runs from their published image, pinned by digest so a changed image
+# cannot change the result without a change here. exodus_scan.py explains the extra checks around
+# it - chiefly that a scan which read nothing must not come out as "0 trackers".
+EXODUS_IMAGE="exodusprivacy/exodus-standalone:v1.5.0@sha256:a6531be9a6b666a8ffb6aec98b409cf6faf65536c5b9597e5b99195ca9422b88"
+if ! command -v docker > /dev/null; then
+    fail "docker not found, so the tracker scan did not run"
+else
+    APK_DIR="$(cd "$(dirname "$APK")" && pwd)"
+    docker run --rm --user "$(id -u):$(id -g)" \
+        -v "$APK_DIR:/apk:ro" -v "$SCRIPT_DIR:/scripts:ro" \
+        --entrypoint python3 "$EXODUS_IMAGE" \
+        /scripts/exodus_scan.py "/apk/$(basename "$APK")" | tee -a "$REPORT"
+    [ "${PIPESTATUS[0]}" -eq 0 ] || FAILED=1
 fi
 say ""
 
