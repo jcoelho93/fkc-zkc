@@ -130,6 +130,27 @@ Locally, the release variant runs with:
     -Pmindfulscroll.signReleaseWithDebugKey=true
 ```
 
+`build` also runs [`verify_release_apk.sh`](.github/scripts/verify_release_apk.sh) on the built
+release APK: the permission set, the accessibility config, networking code, native libraries,
+and an [Exodus Privacy](https://reports.exodus-privacy.eu.org/) tracker scan. The scan runs in
+Exodus's own Docker image, pinned by digest in the script, against their live tracker database.
+So it needs network access to `reports.exodus-privacy.eu.org`, and it fails, rather than passing
+empty, if that is unreachable. Run it locally (Docker needed) with:
+
+```bash
+./gradlew assembleRelease
+.github/scripts/verify_release_apk.sh app/build/outputs/apk/release/app-release-unsigned.apk report.txt
+```
+
+The release workflow runs the same script with `REQUIRE_SIGNED=1`, which also requires the APK's
+signing certificate to equal the fingerprint published in the README, under
+`<!-- release-cert-sha256 -->`. **Rotating the signing key therefore means updating that README
+line in the same change**, or the next release fails before it publishes.
+
+[OpenSSF Scorecard](https://scorecard.dev/) runs weekly and on every push to `main`
+(`scorecard.yml`). It is not a required check: it grades the repository's process, and its
+findings land under *Security → Code scanning*.
+
 ## Releases & distribution
 
 Ships as a **signed APK on GitHub Releases**, installed and updated via Obtainium. No
@@ -145,7 +166,11 @@ new build from the installed one. Four repository secrets are needed
 (`SIGNING_KEYSTORE_BASE64`, `SIGNING_KEYSTORE_PASSWORD`, `SIGNING_KEY_ALIAS`,
 `SIGNING_KEY_PASSWORD`), documented at the top of that workflow. **Back up the signing key** —
 it is the app's identity to Android, and replacing it forces everyone to uninstall and start
-over.
+over. Its certificate fingerprint is published in the README, and a release signed by anything
+else fails its verification step.
+
+Security reports go through GitHub's private vulnerability reporting; see
+[SECURITY.md](SECURITY.md).
 
 **Not the Play Store.** Play review is strict about the Accessibility API being used for
 anything other than assisting users with disabilities, and this app isn't eligible for the

@@ -141,7 +141,13 @@ Three checks, all required to be green before merge:
 
 Releases are tag-triggered (`git tag v0.3.0 && git push origin v0.3.0`), signed, and published
 as a GitHub Release for Obtainium. A missing keystore must keep producing an **unsigned** APK —
-that is the loud failure the publish workflow's verify step depends on.
+that is the loud failure the publish workflow's verify step depends on. The release also fails
+unless the APK's signing certificate equals the SHA-256 published in the README (under
+`<!-- release-cert-sha256 -->`), so a key rotation must update that line in the same change.
+
+`verify_release_apk.sh` includes an Exodus Privacy tracker scan that needs Docker and network
+access to `reports.exodus-privacy.eu.org`. If that site is down, `build` fails. That is
+deliberate: a scan that can't load its signatures must not report "0 trackers".
 
 ## The thing to understand about this codebase
 

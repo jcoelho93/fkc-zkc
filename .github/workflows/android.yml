@@ -37,19 +37,27 @@ jobs:
       # Runs against the built release APK, not the source: the claims the README makes are about
       # what lands on someone's phone, and only the artifact can answer that. Gating here means a
       # dependency bump that quietly adds a permission fails the PR that introduced it, rather
-      # than being found later by a user reading `dumpsys package`.
+      # than being found later by a user reading `dumpsys package`. It includes the Exodus Privacy
+      # tracker scan, which runs in Exodus's own image (pinned by digest in the script) against the
+      # live tracker database - so a newly-catalogued tracker in an existing dependency fails here.
+      #
+      # The summary is written whether or not a check failed: a red build is exactly when the
+      # report is worth reading, and the script's exit status is kept and returned afterwards.
       - name: Verify the release APK's safety claims
         run: |
+          set -uo pipefail
           chmod +x .github/scripts/verify_release_apk.sh
+          status=0
           ./.github/scripts/verify_release_apk.sh \
             app/build/outputs/apk/release/app-release-unsigned.apk \
-            verification-report.txt
+            verification-report.txt || status=$?
           {
             echo '## Release APK verification'
             echo '```'
             cat verification-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Upload verification report
         if: always()

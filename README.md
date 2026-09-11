@@ -1,5 +1,7 @@
 # Mindful Scroll
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jcoelho93/fkc-zkc/badge)](https://scorecard.dev/viewer/?uri=github.com/jcoelho93/fkc-zkc)
+
 A free, open-source Android app that helps you notice and interrupt compulsive
 infinite-scrolling in apps like Instagram, Reddit, Facebook, TikTok and X/Twitter.
 
@@ -116,11 +118,92 @@ gates every pull request:
 - `INTERNET` is absent;
 - the accessibility service declares `canRetrieveWindowContent=false`, `canRequestFilterKeyEvents=false`, and an event mask of exactly `0x1820` (scroll, window-content, window-state — nothing else);
 - no networking code (`Socket`, `HttpURLConnection`, OkHttp, Retrofit, `WebView`) survives in the compiled app;
-- no unexpected native libraries.
+- no unexpected native libraries;
+- a release is signed by exactly one certificate, the one [published below](#dont-trust-us-check-it);
+- **zero known trackers**, by [Exodus Privacy](https://reports.exodus-privacy.eu.org/)'s own
+  scanner and tracker database rather than ours. The scan is only reported as clean after the
+  same scanner has flagged a planted list of real tracker classes, so a scan that silently read
+  nothing cannot pass.
 
 These are claims about *the artifact*, not about the source it was built from. Verifying that the
 APK was built from the commit it claims — reproducible builds — is
 [issue #15](../../issues/15) and is not done yet.
+
+### Don't trust us, check it
+
+Everything above can be checked against **the copy on your own phone**, without reading any code.
+
+**Release signing certificate (SHA-256).** Every release is signed with this certificate, and the
+release build fails if the APK's certificate is anything else:
+
+<!-- release-cert-sha256 -->
+`58e5e0954224dabfe97ecce55d2df279d8bad9199124b35912e9b095d2eca9f0`
+
+The same value in the colon-separated form some tools print:
+
+```
+com.mindfulscroll.app
+58:E5:E0:95:42:24:DA:BF:E9:7E:CC:E5:5D:2D:F2:79:D8:BA:D9:19:91:24:B3:59:12:E9:B0:95:D2:EC:A9:F0
+```
+
+If your installed copy was signed by anything else, it did not come from this project.
+
+**On the phone alone:** [AppVerifier](https://github.com/soupslurpr/AppVerifier) shows the signing
+certificate of any installed app. Copy the two lines above, share them to AppVerifier, and it
+compares them against the installed Mindful Scroll.
+
+**With a computer**, using [`adb`](https://developer.android.com/tools/adb) and `apksigner` (both
+in the Android SDK's platform-tools and build-tools; no Android development needed):
+
+```sh
+# 1. Copy the app off your phone, exactly as installed.
+adb shell pm path com.mindfulscroll.app        # prints package:/data/app/…/base.apk
+adb pull /data/app/…/base.apk mindful-scroll.apk   # paste the path it printed
+
+# 2. Who signed it? Compare the SHA-256 line with the fingerprint above.
+apksigner verify --print-certs mindful-scroll.apk
+
+# 3. Which permissions does it hold? Compare with the table above.
+adb shell dumpsys package com.mindfulscroll.app | grep -A12 'requested permissions:'
+
+# 4. Can it reach the internet? No output means INTERNET is not declared.
+adb shell dumpsys package com.mindfulscroll.app | grep 'android.permission.INTERNET'
+```
+
+For the full report — the accessibility service's settings, networking code, trackers — run the
+same script the release runs, on the APK you just pulled. It needs the Android SDK build-tools
+(with `ANDROID_HOME` pointing at the SDK) and Docker:
+
+```sh
+git clone https://github.com/jcoelho93/fkc-zkc && cd fkc-zkc
+REQUIRE_SIGNED=1 .github/scripts/verify_release_apk.sh /path/to/mindful-scroll.apk report.txt
+```
+
+Re-check after updates rather than once. Each update is a new APK, and the checks above only
+describe the one you checked.
+
+### What this does not protect against
+
+The checks above are strong for what they cover. The limits are just as important:
+
+- **The signing key being stolen.** Whoever holds it can sign an APK that Android and every
+  check above accept as a genuine update. The published fingerprint cannot tell a stolen key
+  from the real one; only reproducible builds, still open in [#15](../../issues/15), would let
+  you confirm an APK was built from public source.
+- **The maintainer or the build.** Until builds are reproducible, you are trusting that GitHub
+  Actions built the APK from the commit its release names. The report checks the APK's
+  *behaviour*, not where it came from.
+- **A future version.** An accessibility service *can* be changed to read screen content. This
+  one is not, today, and the release fails if it is. But a future maintainer could change the
+  check and the setting together. That is why the checks run on each APK, and why re-checking
+  on update matters.
+- **A malicious dependency.** Every library in the app runs with the app's permissions. No
+  `INTERNET` permission means none of them can send anything off the device, but a bad library
+  could still misbehave on the device itself.
+- **The phone.** A compromised OS, or another app with more access than this one, is outside
+  anything this app can control.
+
+Found a security problem? See [SECURITY.md](SECURITY.md).
 
 ## Installing on your phone (no computer needed)
 
