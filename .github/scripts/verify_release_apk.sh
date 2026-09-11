@@ -35,6 +35,7 @@ say "Mindful Scroll - release APK verification"
 say "APK:    $APK"
 say "SHA256: $(sha256sum "$APK" | cut -d' ' -f1)"
 say "Built:  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+say "Tools:  build-tools $(basename "$BUILD_TOOLS")"
 say ""
 say "Every claim below is checked against the APK itself, after minification -"
 say "not against the source it was built from."
@@ -216,10 +217,20 @@ CERTS="$(mktemp)"
 if [ ! -x "$APKSIGNER" ]; then
     fail "apksigner not found under $BUILD_TOOLS, so the signature was not checked"
 elif "$APKSIGNER" verify --print-certs "$APK" > "$CERTS" 2>&1; then
-    SIGNERS="$(grep -cE '^Signer #[0-9]+ certificate SHA-256 digest:' "$CERTS" || true)"
-    FINGERPRINT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: \([0-9a-f]*\)$/\1/p' "$CERTS")"
-    say "  this APK's certificate SHA-256: ${FINGERPRINT:-<unreadable>}"
-    if [ "$SIGNERS" = "1" ] && [ -n "$FINGERPRINT" ] && [ "$FINGERPRINT" = "$PUBLISHED_CERT" ]; then
+    # apksigner's wording is not stable: up to build-tools 36 it prints
+    # "Signer #1 certificate SHA-256 digest: <hex>", from 37 "V2 Signer: certificate SHA-256
+    # digest: <hex>", one block per signature scheme. So read every signer's SHA-256 line whatever
+    # its prefix, and count distinct certificates: one key under two schemes is one signer, and
+    # any second key fails either way.
+    DIGESTS="$(sed -n 's/^.*[Ss]igner.* certificate SHA-256 digest: \([0-9a-f]\{64\}\)$/\1/p' "$CERTS" | sort -u)"
+    SIGNERS="$(printf '%s' "$DIGESTS" | grep -c . || true)"
+    say "  this APK's certificate SHA-256: $(printf '%s' "${DIGESTS:-<unreadable>}" | tr '\n' ' ')"
+    if [ "$SIGNERS" = "0" ]; then
+        # Not "signed by 0 certificates": apksigner verified the APK, so a signer exists and its
+        # output is what could not be read. Show it, so a future format change names itself.
+        fail "apksigner verified the APK, but no certificate SHA-256 could be read from its output:"
+        sed 's/^/          /' "$CERTS" | head -20 | tee -a "$REPORT"
+    elif [ "$SIGNERS" = "1" ] && [ "$DIGESTS" = "$PUBLISHED_CERT" ]; then
         pass "signed by exactly one certificate, the one published in the README"
     else
         fail "signed by $SIGNERS certificate(s), and not by the one published in the README"
